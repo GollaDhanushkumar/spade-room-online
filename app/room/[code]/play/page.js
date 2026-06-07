@@ -21,6 +21,8 @@ import MatchOverlay from '@/components/MatchOverlay';
 import Avatar from '@/components/Avatar';
 import AnimatedScore from '@/components/AnimatedScore';
 import SoundToggle from '@/components/SoundToggle';
+import MicToggle from '@/components/MicToggle';
+import { useVoiceChat } from '@/lib/useVoiceChat';
 import SpectatorBadge from '@/components/SpectatorBadge';
 import SpectatorWelcome from '@/components/SpectatorWelcome';
 import { useSounds } from '@/lib/useSounds';
@@ -69,6 +71,15 @@ export default function PlayPage({ params }) {
   const stalePlayerIds = useStalePlayers(code);
   const sounds = useSounds();
   useRoomTheme(room);
+
+  const otherPlayerIds = seats
+    .filter((s) => s.player_id !== me?.playerId)
+    .map((s) => s.player_id);
+  const voice = useVoiceChat({
+    roomCode: code,
+    myPlayerId: me?.playerId,
+    otherPlayerIds,
+  });  useRoomTheme(room);
 
   useEffect(() => {
     if (!me) return;
@@ -811,6 +822,7 @@ async function handleLockIndivBid() {
         <main className="min-h-screen text-emerald-50 px-5 py-7"
         style={{ background: `linear-gradient(to bottom, var(--theme-bg-from, #0a1410), var(--theme-bg-to, #0f3d2c))` }}>
           <SoundToggle enabled={sounds.enabled} onToggle={sounds.toggle} className="fixed top-3 left-3 z-30" />
+<MicToggle enabled={voice.micEnabled} onToggle={voice.toggleMic} className="fixed top-3 left-16 z-30" />
           <SpectatorBadge className="fixed top-3 right-3 z-30" />
           <div className="max-w-md mx-auto pt-12">
 
@@ -907,6 +919,7 @@ async function handleLockIndivBid() {
       <main className="min-h-screen text-emerald-50 px-5 py-7"
         style={{ background: `linear-gradient(to bottom, var(--theme-bg-from, #0a1410), var(--theme-bg-to, #0f3d2c))` }}>
         <SoundToggle enabled={sounds.enabled} onToggle={sounds.toggle} className="fixed top-3 left-3 z-30" />
+<MicToggle enabled={voice.micEnabled} onToggle={voice.toggleMic} className="fixed top-3 left-16 z-30" />
         {iAmSpectator && <SpectatorBadge className="fixed top-3 right-3 z-30" />}
         <div className="max-w-md mx-auto">
           <div className="text-center mb-5">
@@ -1130,6 +1143,7 @@ async function handleLockIndivBid() {
       <main className="min-h-screen text-emerald-50 px-5 py-7"
         style={{ background: `linear-gradient(to bottom, var(--theme-bg-from, #0a1410), var(--theme-bg-to, #0f3d2c))` }}>
         <SoundToggle enabled={sounds.enabled} onToggle={sounds.toggle} className="fixed top-3 left-3 z-30" />
+<MicToggle enabled={voice.micEnabled} onToggle={voice.toggleMic} className="fixed top-3 left-16 z-30" />
         {iAmSpectator && <SpectatorBadge className="fixed top-3 right-3 z-30" />}
         <div className={`max-w-md mx-auto ${iAmSpectator ? 'pt-12' : ''}`}>
           <div className="text-center mb-5">
@@ -1238,6 +1252,7 @@ async function handleLockIndivBid() {
         <main className="min-h-screen text-emerald-50 px-3 py-5 flex flex-col"
         style={{ background: `linear-gradient(to bottom, var(--theme-bg-from, #0a1410), var(--theme-bg-to, #0f3d2c))` }}>
           <SoundToggle enabled={sounds.enabled} onToggle={sounds.toggle} className="fixed top-3 left-3 z-30" />
+<MicToggle enabled={voice.micEnabled} onToggle={voice.toggleMic} className="fixed top-3 left-16 z-30" />
           <SpectatorBadge className="fixed top-3 right-3 z-30" />
           <div className="max-w-3xl mx-auto w-full flex-1 flex flex-col pt-12">
 
@@ -1313,6 +1328,7 @@ async function handleLockIndivBid() {
       <main className="min-h-screen text-emerald-50 px-3 py-5 flex flex-col"
         style={{ background: `linear-gradient(to bottom, var(--theme-bg-from, #0a1410), var(--theme-bg-to, #0f3d2c))` }}>
         <SoundToggle enabled={sounds.enabled} onToggle={sounds.toggle} className="fixed top-3 left-3 z-30" />
+<MicToggle enabled={voice.micEnabled} onToggle={voice.toggleMic} className="fixed top-3 left-16 z-30" />
         {iAmSpectator && <SpectatorBadge className="fixed top-3 right-3 z-30" />}
         <div className="max-w-2xl mx-auto w-full flex-1 flex flex-col">
           <div className="text-center mb-3">
@@ -1397,6 +1413,7 @@ async function handleLockIndivBid() {
             currentTrick={currentTrick}
             currentPlayerSeatIdx={currentPlayerSeatIdx}
             revealedWinner={revealedWinner}
+            talkingPlayers={voice.talkingPlayers}
           />
 
           <div className="bg-emerald-950/30 border border-emerald-900/60 rounded-2xl p-3 mt-3">
@@ -1677,7 +1694,7 @@ function ConfettiBurst() {
 // ──────────────────────────────────────────────────────────
 // PlayTable
 // ──────────────────────────────────────────────────────────
-function PlayTable({ seats, allHands, mySeat, currentTrick, currentPlayerSeatIdx, revealedWinner }) {
+function PlayTable({ seats, allHands, mySeat, currentTrick, currentPlayerSeatIdx, revealedWinner, talkingPlayers }) {
   const N = seats.length;
   if (N === 0 || !mySeat) return null;
 
@@ -1766,8 +1783,8 @@ function PlayTable({ seats, allHands, mySeat, currentTrick, currentPlayerSeatIdx
               transform: 'translate(-50%, -50%)',
               zIndex: isWinningSeat ? 8 : 3,
             }}>
-            <PlayerSeat
-              seat={seat}
+           <PlayerSeat
+              seat={{ ...seat, _talking: talkingPlayers?.has(seat.player_id) ?? false }}
               isMe={isMe}
               isTurn={isTurn}
               isWinningSeat={isWinningSeat}
@@ -1835,8 +1852,19 @@ function PlayerSeat({ seat, isMe, isTurn, isWinningSeat, cardCount, teamColor })
         </div>
       )}
 
-      <div className="flex items-center gap-1.5 mt-1">
-        <Avatar avatarId={seat.avatar_id} playerName={seat.name} size="xs" borderColor={teamColor} />
+     <div className="flex items-center gap-1.5 mt-1">
+        <div className="relative">
+          <Avatar avatarId={seat.avatar_id} playerName={seat.name} size="xs" borderColor={teamColor} />
+          {seat._talking && (
+            <span
+              className="absolute inset-0 rounded-full pointer-events-none"
+              style={{
+                boxShadow: '0 0 0 2px #4ade80, 0 0 10px #4ade80',
+                animation: 'talkingPulse 0.8s ease-in-out infinite',
+              }}
+            />
+          )}
+        </div>
         <div
           className="px-2 py-0.5 rounded-md text-[11px] font-medium whitespace-nowrap shadow-md"
           style={{

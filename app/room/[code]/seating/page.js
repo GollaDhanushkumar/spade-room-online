@@ -16,6 +16,10 @@ import Avatar from '@/components/Avatar';
 import { usePresence } from '@/lib/usePresence';
 import { useHostPromotion } from '@/lib/useHostPromotion';
 import { useRoomTheme } from '@/lib/useRoomTheme';
+import MicToggle from '@/components/MicToggle';
+import SoundToggle from '@/components/SoundToggle';
+import { useSounds } from '@/lib/useSounds';
+import { useVoiceChat } from '@/lib/useVoiceChat';
 import CardBack from '@/components/CardBack';
 
 export default function SeatingPage({ params }) {
@@ -44,6 +48,16 @@ export default function SeatingPage({ params }) {
   usePresence(me?.playerId);
   useHostPromotion(code, me?.playerId);
   useRoomTheme(room);
+  const sounds = useSounds();
+
+  const otherPlayerIds = seats
+    .filter((s) => s.player_id !== me?.playerId)
+    .map((s) => s.player_id);
+  const voice = useVoiceChat({
+    roomCode: code,
+    myPlayerId: me?.playerId,
+    otherPlayerIds,
+  });
 
   useEffect(() => {
     if (!me) return;
@@ -286,7 +300,9 @@ export default function SeatingPage({ params }) {
   return (
     <main className="min-h-screen text-emerald-50 px-6 py-8"
       style={{ background: `linear-gradient(to bottom, var(--theme-bg-from, #0a1410), var(--theme-bg-to, #0f3d2c))` }}>
-      <div className="max-w-md mx-auto">
+      <SoundToggle enabled={sounds.enabled} onToggle={sounds.toggle} className="fixed top-3 left-3 z-30" />
+      <MicToggle enabled={voice.micEnabled} onToggle={voice.toggleMic} className="fixed top-3 left-16 z-30" />
+      <div className="max-w-md mx-auto pt-12">
 
         <div className="flex items-center justify-between mb-6">
           <div>
@@ -418,7 +434,18 @@ export default function SeatingPage({ params }) {
                       }`}
                     >
                       <div className="flex items-center gap-2 min-w-0">
-                        <Avatar avatarId={s.avatar_id} playerName={s.name} size="sm" />
+                        <div className="relative">
+                          <Avatar avatarId={s.avatar_id} playerName={s.name} size="sm" />
+                          {voice.talkingPlayers.has(s.player_id) && (
+                            <span
+                              className="absolute inset-0 rounded-full pointer-events-none"
+                              style={{
+                                boxShadow: '0 0 0 2px #4ade80, 0 0 12px #4ade80',
+                                animation: 'talkingPulse 0.8s ease-in-out infinite',
+                              }}
+                            />
+                          )}
+                        </div>
                         <span className="font-medium text-sm truncate">{s.name}</span>
                         {isMe && <span className="text-xs text-emerald-200/40">(you)</span>}
                         {tied && <span className="text-xs text-red-400">tied</span>}
