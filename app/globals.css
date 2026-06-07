@@ -24,3 +24,87 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+@keyframes bidPop {
+  0%   { transform: scale(0.85); opacity: 0.5; }
+  60%  { transform: scale(1.1);  opacity: 1; }
+  100% { transform: scale(1);    opacity: 1; }
+}
+
+/* ──────────────────────────────────────────────────────────
+   THEME ANIMATIONS (Step 8.4)
+   Only activate when data-animations-enabled="on" on <html>.
+   Themes without animation are unaffected.
+   ────────────────────────────────────────────────────────── */
+
+/* Floating animated overlay — shared base. z-index keeps it ABOVE the main bg. */
+html[data-animations-enabled="on"] body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 50;
+  opacity: 0;
+  transition: opacity 0.6s ease;
+}
+
+/* ─── OCEAN: subtle drifting waves ─── */
+html[data-animations-enabled="on"][data-theme-id="ocean"] body::before {
+  opacity: 1;
+  background:
+    radial-gradient(ellipse 60% 40% at 30% 70%, rgba(126, 196, 245, 0.10) 0%, transparent 60%),
+    radial-gradient(ellipse 50% 30% at 70% 30%, rgba(126, 196, 245, 0.08) 0%, transparent 60%),
+    radial-gradient(ellipse 40% 25% at 20% 20%, rgba(126, 196, 245, 0.06) 0%, transparent 60%);
+  animation: oceanDrift 18s ease-in-out infinite alternate;
+}
+
+@keyframes oceanDrift {
+  0%   { transform: translate(0, 0); }
+  50%  { transform: translate(-15px, 10px); }
+  100% { transform: translate(10px, -8px); }
+}
+/* ─── MIDNIGHT: twinkling stars (visible sized) ─── */
+html[data-animations-enabled="on"][data-theme-id="midnight"] body::before {
+  opacity: 1;
+  background-image:
+    radial-gradient(circle at 12% 18%, white 1.2px, transparent 2px),
+    radial-gradient(circle at 28% 62%, white 1px, transparent 1.8px),
+    radial-gradient(circle at 47% 30%, white 1.3px, transparent 2.2px),
+    radial-gradient(circle at 65% 78%, white 1px, transparent 1.8px),
+    radial-gradient(circle at 82% 22%, white 1.4px, transparent 2.4px),
+    radial-gradient(circle at 91% 55%, white 1.1px, transparent 1.9px),
+    radial-gradient(circle at 7% 88%, white 1.2px, transparent 2px),
+    radial-gradient(circle at 55% 12%, white 1px, transparent 1.7px),
+    radial-gradient(circle at 38% 92%, white 1.1px, transparent 1.9px),
+    radial-gradient(circle at 18% 45%, white 1px, transparent 1.6px),
+    radial-gradient(circle at 75% 40%, white 1.2px, transparent 2px),
+    radial-gradient(circle at 5% 30%, white 0.9px, transparent 1.6px);
+  animation: starsTwinkle 3s ease-in-out infinite;
+}
+
+@keyframes starsTwinkle {
+  0%, 100% { opacity: 1;    }
+  50%      { opacity: 0.45; }
+}
+
+/* ─── NEON: pulsing color wash ─── */
+html[data-animations-enabled="on"][data-theme-id="neon"] body::before {
+  opacity: 1;
+  background:
+    radial-gradient(circle at 25% 30%, rgba(0, 255, 234, 0.15) 0%, transparent 50%),
+    radial-gradient(circle at 75% 70%, rgba(212, 165, 245, 0.15) 0%, transparent 50%),
+    radial-gradient(circle at 50% 50%, rgba(110, 31, 94, 0.10) 0%, transparent 60%);
+  animation: neonPulse 6s ease-in-out infinite;
+}
+
+@keyframes neonPulse {
+  0%, 100% { opacity: 0.8; filter: blur(0px);  }
+  50%      { opacity: 1;   filter: blur(2px);  }
+}
+
+/* Optional: reduce motion for users who prefer it */
+@media (prefers-reduced-motion: reduce) {
+  html[data-animations-enabled="on"] body::before {
+    animation: none !important;
+  }
+}

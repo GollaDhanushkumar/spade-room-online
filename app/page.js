@@ -1,231 +1,279 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { pickRandomAvatar, getAvatarById } from '@/lib/avatars';
+import AvatarPicker from '@/components/AvatarPicker';
+import Avatar from '@/components/Avatar';
+import InstallAppButton from '@/components/InstallAppButton';
+
+const SAFE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+function generateRoomCode() {
+  let code = '';
+  for (let i = 0; i < 6; i++) {
+    code += SAFE_ALPHABET[Math.floor(Math.random() * SAFE_ALPHABET.length)];
+  }
+  return code;
+}
+
+function generatePlayerId() {
+  return Math.random().toString(36).slice(2, 12);
+}
+
+function generateToken() {
+  return Math.random().toString(36).slice(2, 18);
+}
 
 export default function HomePage() {
+  const router = useRouter();
   const [mode, setMode] = useState(null); // null | 'create' | 'join'
   const [name, setName] = useState('');
-  const [roomCode, setRoomCode] = useState('');
+  const [code, setCode] = useState('');
+  const [selectedAvatarId, setSelectedAvatarId] = useState(null);
+  const [takenAvatars, setTakenAvatars] = useState([]);
+  const [showAvatarPicker, setShowAvatarPicker] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const router = useRouter();
 
-  function generateRoomCode() {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    let code = '';
-    for (let i = 0; i < 6; i++) {
-      code += chars[Math.floor(Math.random() * chars.length)];
-    }
-    return code;
-  }
-
-  function generateId() {
-    return Math.random().toString(36).slice(2, 12);
-  }
-
-  async function handleCreateRoom() {
-    if (!name.trim()) {
-      setError('Please enter your name');
+  // When in "join" mode and code is 6 chars, fetch already-taken avatars for that room
+  useEffect(() => {
+    if (mode !== 'join' || code.length !== 6) {
+      setTakenAvatars([]);
       return;
     }
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from('players')
+        .select('avatar_id')
+        .eq('room_code', code.toUpperCase());
+      if (!cancelled) {
+        setTakenAvatars((data || []).map((p) => p.avatar_id).filter(Boolean));
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [mode, code]);
+
+  async function handleCreate() {
     setError('');
+    if (!name.trim()) { setError('Enter your name first.'); return; }
     setLoading(true);
 
-    const code = generateRoomCode();
-    const hostId = generateId();
-    const token = generateId();
+    let avatarId = selectedAvatarId;
+    if (!avatarId) avatarId = pickRandomAvatar().id;
 
-    // Create the room
-    const { error: roomError } = await supabase
-      .from('rooms')
-      .insert({ code, host_player_id: hostId, status: 'lobby' });
+    const newCode = generateRoomCode();
+    const playerId = generatePlayerId();
+    const token = generateToken();
 
-    if (roomError) {
-      setError('Could not create room: ' + roomError.message);
-      setLoading(false);
-      return;
-    }
+    const { error: roomErr } = await supabase.from('rooms').insert({
+      code: newCode,
+      status: 'lobby',
+      host_player_id: playerId,
+    });
+    if (roomErr) { setError('Could not create room: ' + roomErr.message); setLoading(false); return; }
 
-    // Add the host as the first player
-    const { error: playerError } = await supabase.from('players').insert({
-      id: hostId,
-      room_code: code,
+    const { error: playerErr } = await supabase.from('players').insert({
+      id: playerId,
+      room_code: newCode,
       name: name.trim(),
       is_host: true,
       is_spectator: false,
       connection_token: token,
+      avatar_id: avatarId,
     });
+    if (playerErr) { setError('Could not join: ' + playerErr.message); setLoading(false); return; }
 
-    if (playerError) {
-      setError('Could not join room: ' + playerError.message);
-      setLoading(false);
-      return;
-    }
-
-    // Save connection info in browser so this player can reconnect
-    localStorage.setItem(
-      `spade-room-${code}`,
-      JSON.stringify({ playerId: hostId, token, name: name.trim() })
-    );
-
-    router.push(`/room/${code}`);
+    localStorage.setItem(`spade-room-${newCode}`, JSON.stringify({
+      playerId, token, name: name.trim(), avatarId,
+    }));
+    router.push(`/room/${newCode}`);
   }
 
-  async function handleJoinRoom() {
-    if (!name.trim()) {
-      setError('Please enter your name');
-      return;
-    }
-    if (!roomCode.trim()) {
-      setError('Please enter a room code');
-      return;
-    }
+  async function handleJoin() {
     setError('');
+    if (!name.trim()) { setError('Enter your name first.'); return; }
+    if (code.length !== 6) { setError('Enter the 6-letter room code.'); return; }
     setLoading(true);
 
-    const code = roomCode.trim().toUpperCase();
+    const upperCode = code.toUpperCase();
+    const { data: room } = await supabase.from('rooms').select('*').eq('code', upperCode).single();
+    if (!room) { setError('Room not found.'); setLoading(false); return; }
 
-    // Check room exists
-    const { data: room, error: roomError } = await supabase
-      .from('rooms')
-      .select('code, status')
-      .eq('code', code)
-      .single();
-
-    if (roomError || !room) {
-      setError('Room not found. Check the code and try again.');
-      setLoading(false);
-      return;
+    let avatarId = selectedAvatarId;
+    if (!avatarId || takenAvatars.includes(avatarId)) {
+      avatarId = pickRandomAvatar(takenAvatars).id;
     }
 
-    const playerId = generateId();
-    const token = generateId();
-    const isSpectator = room.status !== 'lobby'; // joined after game started
+    const playerId = generatePlayerId();
+    const token = generateToken();
 
-    const { error: playerError } = await supabase.from('players').insert({
+    const { error: playerErr } = await supabase.from('players').insert({
       id: playerId,
-      room_code: code,
+      room_code: upperCode,
       name: name.trim(),
       is_host: false,
-      is_spectator: isSpectator,
+      is_spectator: room.status !== 'lobby',
       connection_token: token,
+      avatar_id: avatarId,
     });
-
-    if (playerError) {
-      if (playerError.code === '23505') {
-        setError('That name is already taken in this room. Pick another.');
+    if (playerErr) {
+      if (playerErr.message?.includes('duplicate')) {
+        setError('That name is already taken in this room.');
       } else {
-        setError('Could not join: ' + playerError.message);
+        setError('Could not join: ' + playerErr.message);
       }
       setLoading(false);
       return;
     }
 
-    localStorage.setItem(
-      `spade-room-${code}`,
-      JSON.stringify({ playerId, token, name: name.trim() })
-    );
-
-    router.push(`/room/${code}`);
+    localStorage.setItem(`spade-room-${upperCode}`, JSON.stringify({
+      playerId, token, name: name.trim(), avatarId,
+    }));
+    router.push(`/room/${upperCode}`);
   }
 
-  return (
-    <main className="min-h-screen flex items-center justify-center px-6 py-12 bg-gradient-to-b from-[#0a1410] to-[#0f3d2c]">
-      <div className="w-full max-w-md">
-        <div className="text-center mb-10">
-          <div className="text-2xl tracking-tighter mb-2">
-            <span className="text-white">♠</span>
-            <span className="text-red-400">♥</span>
-            <span className="text-red-400">♦</span>
-            <span className="text-white">♣</span>
-          </div>
-          <h1 className="text-5xl font-serif italic text-amber-200">
-            The Spade Room
-          </h1>
-          <p className="text-emerald-200/60 mt-3 text-sm">
-            Play Spades online with friends, anywhere
+  if (mode === null) {
+    return (
+      <main className="min-h-screen flex items-center justify-center bg-gradient-to-b from-[#0a1410] to-[#0f3d2c] px-6">
+        <div className="max-w-sm w-full text-center">
+          <p className="text-xs uppercase tracking-widest text-emerald-200/60 mb-2">welcome to</p>
+          <h1 className="text-4xl font-serif italic text-amber-200 mb-2">The Spade Room</h1>
+          <p className="text-emerald-200/50 text-sm mb-10">
+            Play Spades online with friends.
           </p>
-        </div>
-
-        {mode === null && (
-          <div className="space-y-3">
+        <div className="space-y-3">
             <button
               onClick={() => setMode('create')}
-              className="w-full py-4 rounded-xl font-semibold bg-gradient-to-b from-amber-200 to-amber-400 text-[#07100c] hover:from-amber-100 hover:to-amber-300 transition"
+              className="w-full py-4 rounded-xl font-semibold bg-gradient-to-b from-amber-200 to-amber-400 text-[#07100c]"
             >
               Create a Room
             </button>
             <button
               onClick={() => setMode('join')}
-              className="w-full py-4 rounded-xl font-semibold bg-transparent border border-emerald-700 text-emerald-100 hover:bg-emerald-900/40 transition"
+              className="w-full py-4 rounded-xl font-medium bg-[#0f1d18] border border-emerald-900 text-emerald-100 hover:bg-[#14271f] transition"
             >
               Join a Room
             </button>
           </div>
-        )}
 
-        {mode !== null && (
-          <div className="space-y-4">
+          <div className="mt-8 flex justify-center">
+            <InstallAppButton />
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  return (
+    <main className="min-h-screen bg-gradient-to-b from-[#0a1410] to-[#0f3d2c] px-6 py-10">
+      <div className="max-w-sm mx-auto">
+        <button
+          onClick={() => { setMode(null); setError(''); setShowAvatarPicker(false); }}
+          className="text-emerald-200/60 text-sm mb-6 hover:text-emerald-100 transition"
+        >
+          ← Back
+        </button>
+        <h1 className="text-3xl font-serif italic text-amber-200 mb-1">
+          {mode === 'create' ? 'Create a Room' : 'Join a Room'}
+        </h1>
+        <p className="text-emerald-200/50 text-sm mb-6">
+          {mode === 'create' ? 'Start a new game.' : 'Enter the room code your friend shared.'}
+        </p>
+
+        <div className="space-y-4">
+          {mode === 'join' && (
             <div>
               <label className="block text-xs uppercase tracking-widest text-emerald-200/60 mb-2">
-                Your Name
+                Room code
               </label>
               <input
                 type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                maxLength={20}
-                placeholder="What should we call you?"
-                className="w-full px-4 py-3 rounded-xl bg-[#0f1d18] border border-emerald-900 text-emerald-50 placeholder-emerald-700 focus:outline-none focus:border-amber-300"
+                value={code}
+                onChange={(e) => setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6))}
+                placeholder="ABCDEF"
+                maxLength={6}
+                className="w-full px-4 py-3 rounded-xl bg-[#0f1d18] border border-emerald-900 text-amber-200 font-mono text-2xl tracking-widest text-center placeholder-emerald-200/20 focus:border-amber-300 outline-none"
               />
             </div>
+          )}
 
-            {mode === 'join' && (
-              <div>
-                <label className="block text-xs uppercase tracking-widest text-emerald-200/60 mb-2">
-                  Room Code
-                </label>
-                <input
-                  type="text"
-                  value={roomCode}
-                  onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
-                  maxLength={6}
-                  placeholder="ABCDEF"
-                  className="w-full px-4 py-3 rounded-xl bg-[#0f1d18] border border-emerald-900 text-emerald-50 placeholder-emerald-700 focus:outline-none focus:border-amber-300 uppercase tracking-widest text-center text-lg font-mono"
+          <div>
+            <label className="block text-xs uppercase tracking-widest text-emerald-200/60 mb-2">
+              Your name
+            </label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value.slice(0, 20))}
+              placeholder="Type a name..."
+              maxLength={20}
+              className="w-full px-4 py-3 rounded-xl bg-[#0f1d18] border border-emerald-900 text-emerald-100 focus:border-amber-300 outline-none"
+            />
+          </div>
+
+          {/* Avatar selection */}
+          <div>
+            <label className="block text-xs uppercase tracking-widest text-emerald-200/60 mb-2">
+              Avatar
+            </label>
+            <div className="flex items-center gap-3 mb-3">
+              <Avatar avatarId={selectedAvatarId} playerName={name} size="lg" />
+              <div className="flex-1">
+                <p className="text-sm text-emerald-100">
+                  {selectedAvatarId ? getAvatarById(selectedAvatarId)?.name ?? 'Picked' : 'Random (skip)'}
+                </p>
+                <p className="text-xs text-emerald-200/40">
+                  {selectedAvatarId ? 'Tap below to change' : 'Or pick one yourself'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAvatarPicker((v) => !v)}
+                className="text-xs px-3 py-2 rounded-lg border border-emerald-900 text-emerald-200/80 hover:bg-emerald-950/40 transition"
+              >
+                {showAvatarPicker ? 'Hide' : 'Choose'}
+              </button>
+            </div>
+            {showAvatarPicker && (
+              <div className="bg-[#0f1d18] border border-emerald-900 rounded-xl p-3 max-h-72 overflow-y-auto">
+                <AvatarPicker
+                  selectedId={selectedAvatarId}
+                  onSelect={(id) => setSelectedAvatarId(id)}
+                  takenIds={takenAvatars}
+                  compact
                 />
               </div>
             )}
-
-            {error && (
-              <p className="text-red-400 text-sm bg-red-950/30 border border-red-900/50 rounded-lg px-3 py-2">
-                {error}
+            {mode === 'join' && takenAvatars.length > 0 && (
+              <p className="text-xs text-emerald-200/40 mt-2">
+                {takenAvatars.length} avatar{takenAvatars.length === 1 ? '' : 's'} already taken in this room
               </p>
             )}
-
-            <button
-              onClick={mode === 'create' ? handleCreateRoom : handleJoinRoom}
-              disabled={loading}
-              className="w-full py-4 rounded-xl font-semibold bg-gradient-to-b from-amber-200 to-amber-400 text-[#07100c] hover:from-amber-100 hover:to-amber-300 transition disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading
-                ? 'Loading...'
-                : mode === 'create'
-                ? 'Create Room'
-                : 'Join Room'}
-            </button>
-            <button
-              onClick={() => {
-                setMode(null);
-                setError('');
-              }}
-              className="w-full py-3 text-emerald-200/60 hover:text-emerald-100 transition text-sm"
-            >
-              ← Back
-            </button>
           </div>
-        )}
+
+          {error && (
+            <div className="text-red-400 text-sm bg-red-950/30 border border-red-900/50 rounded-xl p-3">
+              {error}
+            </div>
+          )}
+
+          <button
+            onClick={mode === 'create' ? handleCreate : handleJoin}
+            disabled={loading}
+            className="w-full py-4 rounded-xl font-semibold bg-gradient-to-b from-amber-200 to-amber-400 text-[#07100c] disabled:opacity-50"
+          >
+            {loading
+              ? (mode === 'create' ? 'Creating...' : 'Joining...')
+              : (mode === 'create' ? 'Create Room' : 'Join Room')
+            }
+          </button>
+          <div className="mt-6 flex justify-center">
+          <InstallAppButton />
+        </div>
+        </div>
       </div>
     </main>
   );
