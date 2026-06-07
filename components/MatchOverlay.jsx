@@ -8,7 +8,7 @@ import Avatar from './Avatar';
 export default function MatchOverlay({
   code, game, seats, allRounds, round,
   isTeamMode, teamOrder, teamsByTeam, seatedPlayers,
-  hostId, mePlayerId, voice,
+  hostId, mePlayerId,
 }) {
   const [showScoreboard, setShowScoreboard] = useState(false);
   const [showSeating, setShowSeating] = useState(false);
@@ -59,7 +59,6 @@ export default function MatchOverlay({
           hostId={hostId}
           mePlayerId={mePlayerId}
           dealerSeatIdx={N > 0 ? bidStarterSeatFor(game.current_round || 1, N) : 0}
-          voice={voice}
         />
       )}
     </>
@@ -239,12 +238,9 @@ function ScoreboardModal({
 }
 
 // ───────────────────────────────────────────────────────
-// Seating modal — circular table + per-player mute list
+// Seating modal — circular table only (mute moved to VoicePanel)
 // ───────────────────────────────────────────────────────
-function SeatingModal({ onClose, seats, mode, hostId, mePlayerId, dealerSeatIdx, voice }) {
-  const showMuteList = voice && voice.micEnabled;
-  const otherSeats = seats.filter((s) => s.player_id !== mePlayerId);
-
+function SeatingModal({ onClose, seats, mode, hostId, mePlayerId, dealerSeatIdx }) {
   return (
     <div
       className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4"
@@ -275,67 +271,6 @@ function SeatingModal({ onClose, seats, mode, hostId, mePlayerId, dealerSeatIdx,
             mePlayerId={mePlayerId}
             dealerSeatIdx={dealerSeatIdx}
           />
-
-          {showMuteList && otherSeats.length > 0 && (
-            <div className="mt-5 pt-5 border-t border-emerald-900/40">
-              <div className="flex items-center justify-between mb-3">
-                <p className="text-xs uppercase tracking-widest text-emerald-200/60">Voice — mute players</p>
-                <button
-                  onClick={voice.toggleMasterMute}
-                  className={`text-xs px-2 py-1 rounded transition ${
-                    voice.masterMute
-                      ? 'bg-red-900/40 border border-red-400/50 text-red-200'
-                      : 'border border-emerald-900 text-emerald-200/70 hover:bg-emerald-950/40'
-                  }`}
-                >
-                  {voice.masterMute ? '🔕 All muted' : '🔔 Mute all'}
-                </button>
-              </div>
-              <div className="space-y-2">
-                {otherSeats.map((s) => {
-                  const isMuted = voice.mutedPlayers.has(s.player_id);
-                  const isTalking = voice.talkingPlayers.has(s.player_id);
-                  return (
-                    <div
-                      key={s.player_id}
-                      className="flex items-center justify-between px-3 py-2 rounded-lg bg-[#14271f] border border-emerald-900/40"
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <div className="relative">
-                          <Avatar avatarId={s.avatar_id} playerName={s.name} size="sm" />
-                          {isTalking && !isMuted && !voice.masterMute && (
-                            <span
-                              className="absolute inset-0 rounded-full pointer-events-none"
-                              style={{
-                                boxShadow: '0 0 0 2px #4ade80, 0 0 10px #4ade80',
-                                animation: 'talkingPulse 0.8s ease-in-out infinite',
-                              }}
-                            />
-                          )}
-                        </div>
-                        <span className="text-sm truncate">{s.name}</span>
-                        {isMuted && <span className="text-[10px] uppercase tracking-wider text-red-300/80">muted</span>}
-                      </div>
-                      <button
-                        onClick={() => voice.togglePlayerMute(s.player_id)}
-                        className={`text-xs px-3 py-1.5 rounded-lg transition border ${
-                          isMuted
-                            ? 'bg-red-900/40 border-red-400/50 text-red-200 hover:bg-red-900/60'
-                            : 'border-emerald-900 text-emerald-200/70 hover:bg-emerald-950/40'
-                        }`}
-                        title={isMuted ? `Unmute ${s.name}` : `Mute ${s.name}`}
-                      >
-                        {isMuted ? '🔇 Muted' : '🔊 Mute'}
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-              <p className="text-[10px] text-emerald-200/40 mt-3 text-center">
-                Muting is local — only YOU stop hearing the muted player.
-              </p>
-            </div>
-          )}
         </div>
       </div>
     </div>

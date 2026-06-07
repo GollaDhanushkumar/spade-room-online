@@ -16,7 +16,7 @@ import Avatar from '@/components/Avatar';
 import { usePresence } from '@/lib/usePresence';
 import { useHostPromotion } from '@/lib/useHostPromotion';
 import { useRoomTheme } from '@/lib/useRoomTheme';
-import MicToggle from '@/components/MicToggle';
+import VoicePanel from '@/components/VoicePanel';
 import SoundToggle from '@/components/SoundToggle';
 import { useSounds } from '@/lib/useSounds';
 import { useVoiceChat } from '@/lib/useVoiceChat';
@@ -301,20 +301,12 @@ export default function SeatingPage({ params }) {
     <main className="min-h-screen text-emerald-50 px-6 py-8"
       style={{ background: `linear-gradient(to bottom, var(--theme-bg-from, #0a1410), var(--theme-bg-to, #0f3d2c))` }}>
      <SoundToggle enabled={sounds.enabled} onToggle={sounds.toggle} className="fixed top-3 left-3 z-30" />
-      <MicToggle enabled={voice.micEnabled} onToggle={voice.toggleMic} className="fixed top-3 left-16 z-30" />
-      {voice.micEnabled && (
-        <button
-          onClick={voice.toggleMasterMute}
-          className={`fixed top-3 left-[6.75rem] z-30 flex items-center justify-center w-11 h-11 rounded-full border shadow-lg transition ${
-            voice.masterMute
-              ? 'bg-red-900/50 border-red-400 text-red-200'
-              : 'bg-[#0f1d18] border-emerald-900 hover:bg-[#14271f] hover:border-amber-300/40 text-emerald-200/80'
-          }`}
-          title={voice.masterMute ? 'Unmute everyone' : 'Mute everyone'}
-        >
-          <span className="text-lg">{voice.masterMute ? '🔕' : '🔔'}</span>
-        </button>
-      )}
+      <VoicePanel
+        voice={voice}
+        players={seats.map((s) => ({ player_id: s.player_id, name: s.name, avatar_id: s.avatar_id }))}
+        mePlayerId={me?.playerId}
+        className="top-3 left-16"
+      />
       <div className="max-w-md mx-auto pt-12">
 
         <div className="flex items-center justify-between mb-6">

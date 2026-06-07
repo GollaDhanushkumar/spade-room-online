@@ -21,7 +21,7 @@ import { useSounds } from '@/lib/useSounds';
 import ThemePicker from '@/components/ThemePicker';
 import { useRoomTheme } from '@/lib/useRoomTheme';
 import ThemeAnimation from '@/components/ThemeAnimation';
-import MicToggle from '@/components/MicToggle';
+import VoicePanel from '@/components/VoicePanel';
 import { useVoiceChat } from '@/lib/useVoiceChat';
 import InstallAppButton from '@/components/InstallAppButton';
 
@@ -358,21 +358,13 @@ export default function RoomPage({ params }) {
     <main className="min-h-screen text-emerald-50 px-6 py-10 relative"
       style={{ background: `linear-gradient(to bottom, var(--theme-bg-from, #0a1410), var(--theme-bg-to, #0f3d2c))` }}>
         <ThemeAnimation room={room} />
-      <SoundToggle enabled={sounds.enabled} onToggle={sounds.toggle} className="fixed top-3 left-3 z-30" />
-       <MicToggle enabled={voice.micEnabled} onToggle={voice.toggleMic} className="fixed top-3 left-16 z-30" />
-       {voice.micEnabled && (
-         <button
-           onClick={voice.toggleMasterMute}
-           className={`fixed top-3 left-[6.75rem] z-30 flex items-center justify-center w-11 h-11 rounded-full border shadow-lg transition ${
-             voice.masterMute
-               ? 'bg-red-900/50 border-red-400 text-red-200'
-               : 'bg-[#0f1d18] border-emerald-900 hover:bg-[#14271f] hover:border-amber-300/40 text-emerald-200/80'
-           }`}
-           title={voice.masterMute ? 'Unmute everyone' : 'Mute everyone'}
-         >
-           <span className="text-lg">{voice.masterMute ? '🔕' : '🔔'}</span>
-         </button>
-       )}
+     <SoundToggle enabled={sounds.enabled} onToggle={sounds.toggle} className="fixed top-3 left-3 z-30" />
+       <VoicePanel
+         voice={voice}
+         players={players.map((p) => ({ player_id: p.id, name: p.name, avatar_id: p.avatar_id }))}
+         mePlayerId={me?.playerId}
+         className="top-3 left-16"
+       />
 
       {/* Floating action buttons — top right */}
       <div className="fixed top-3 right-3 z-30 flex items-center gap-2">
