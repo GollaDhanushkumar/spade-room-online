@@ -358,8 +358,21 @@ export default function RoomPage({ params }) {
     <main className="min-h-screen text-emerald-50 px-6 py-10 relative"
       style={{ background: `linear-gradient(to bottom, var(--theme-bg-from, #0a1410), var(--theme-bg-to, #0f3d2c))` }}>
         <ThemeAnimation room={room} />
-       <SoundToggle enabled={sounds.enabled} onToggle={sounds.toggle} className="fixed top-3 left-3 z-30" />
+      <SoundToggle enabled={sounds.enabled} onToggle={sounds.toggle} className="fixed top-3 left-3 z-30" />
        <MicToggle enabled={voice.micEnabled} onToggle={voice.toggleMic} className="fixed top-3 left-16 z-30" />
+       {voice.micEnabled && (
+         <button
+           onClick={voice.toggleMasterMute}
+           className={`fixed top-3 left-[6.75rem] z-30 flex items-center justify-center w-11 h-11 rounded-full border shadow-lg transition ${
+             voice.masterMute
+               ? 'bg-red-900/50 border-red-400 text-red-200'
+               : 'bg-[#0f1d18] border-emerald-900 hover:bg-[#14271f] hover:border-amber-300/40 text-emerald-200/80'
+           }`}
+           title={voice.masterMute ? 'Unmute everyone' : 'Mute everyone'}
+         >
+           <span className="text-lg">{voice.masterMute ? '🔕' : '🔔'}</span>
+         </button>
+       )}
 
       {/* Floating action buttons — top right */}
       <div className="fixed top-3 right-3 z-30 flex items-center gap-2">
@@ -439,6 +452,20 @@ export default function RoomPage({ params }) {
                     {p.is_host && <span className="text-amber-300 text-xs">👑 host</span>}
                     {p.is_spectator && <span className="text-emerald-200/40 text-xs">👁 spectator</span>}
                   </div>
+
+                  {!isMe && voice.micEnabled && (
+                    <button
+                      onClick={() => voice.togglePlayerMute(p.id)}
+                      className={`text-xs px-2 py-1 rounded transition ${
+                        voice.mutedPlayers.has(p.id)
+                          ? 'text-red-400/80 hover:text-red-300'
+                          : 'text-emerald-200/50 hover:text-emerald-200'
+                      }`}
+                      title={voice.mutedPlayers.has(p.id) ? `Unmute ${p.name}` : `Mute ${p.name}`}
+                    >
+                      {voice.mutedPlayers.has(p.id) ? '🔇' : '🔊'}
+                    </button>
+                  )}
                   {iAmHost && !isMe && !p.is_spectator && (
                     <div className="flex items-center gap-1">
                       <button onClick={() => handleTransferHost(p.id, p.name)}

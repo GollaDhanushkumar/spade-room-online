@@ -782,6 +782,7 @@ async function handleLockIndivBid() {
     code, game, seats, allRounds, round,
     isTeamMode, teamOrder, teamsByTeam, seatedPlayers,
     hostId, mePlayerId: me?.playerId,
+    voice,
   };
 
   // Play victory fanfare when the match ends and I won
@@ -821,8 +822,21 @@ async function handleLockIndivBid() {
         {showSpectatorWelcome && <SpectatorWelcome onDismiss={dismissSpectatorWelcome} />}
         <main className="min-h-screen text-emerald-50 px-5 py-7"
         style={{ background: `linear-gradient(to bottom, var(--theme-bg-from, #0a1410), var(--theme-bg-to, #0f3d2c))` }}>
-          <SoundToggle enabled={sounds.enabled} onToggle={sounds.toggle} className="fixed top-3 left-3 z-30" />
+         <SoundToggle enabled={sounds.enabled} onToggle={sounds.toggle} className="fixed top-3 left-3 z-30" />
 <MicToggle enabled={voice.micEnabled} onToggle={voice.toggleMic} className="fixed top-3 left-16 z-30" />
+{voice.micEnabled && (
+  <button
+    onClick={voice.toggleMasterMute}
+    className={`fixed top-3 left-[6.75rem] z-30 flex items-center justify-center w-11 h-11 rounded-full border shadow-lg transition ${
+      voice.masterMute
+        ? 'bg-red-900/50 border-red-400 text-red-200'
+        : 'bg-[#0f1d18] border-emerald-900 hover:bg-[#14271f] hover:border-amber-300/40 text-emerald-200/80'
+    }`}
+    title={voice.masterMute ? 'Unmute everyone' : 'Mute everyone'}
+  >
+    <span className="text-lg">{voice.masterMute ? '🔕' : '🔔'}</span>
+  </button>
+)}
           <SpectatorBadge className="fixed top-3 right-3 z-30" />
           <div className="max-w-md mx-auto pt-12">
 

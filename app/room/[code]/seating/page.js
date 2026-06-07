@@ -300,8 +300,21 @@ export default function SeatingPage({ params }) {
   return (
     <main className="min-h-screen text-emerald-50 px-6 py-8"
       style={{ background: `linear-gradient(to bottom, var(--theme-bg-from, #0a1410), var(--theme-bg-to, #0f3d2c))` }}>
-      <SoundToggle enabled={sounds.enabled} onToggle={sounds.toggle} className="fixed top-3 left-3 z-30" />
+     <SoundToggle enabled={sounds.enabled} onToggle={sounds.toggle} className="fixed top-3 left-3 z-30" />
       <MicToggle enabled={voice.micEnabled} onToggle={voice.toggleMic} className="fixed top-3 left-16 z-30" />
+      {voice.micEnabled && (
+        <button
+          onClick={voice.toggleMasterMute}
+          className={`fixed top-3 left-[6.75rem] z-30 flex items-center justify-center w-11 h-11 rounded-full border shadow-lg transition ${
+            voice.masterMute
+              ? 'bg-red-900/50 border-red-400 text-red-200'
+              : 'bg-[#0f1d18] border-emerald-900 hover:bg-[#14271f] hover:border-amber-300/40 text-emerald-200/80'
+          }`}
+          title={voice.masterMute ? 'Unmute everyone' : 'Mute everyone'}
+        >
+          <span className="text-lg">{voice.masterMute ? '🔕' : '🔔'}</span>
+        </button>
+      )}
       <div className="max-w-md mx-auto pt-12">
 
         <div className="flex items-center justify-between mb-6">
@@ -450,7 +463,20 @@ export default function SeatingPage({ params }) {
                         {isMe && <span className="text-xs text-emerald-200/40">(you)</span>}
                         {tied && <span className="text-xs text-red-400">tied</span>}
                       </div>
-                      <div className="flex items-center gap-1">
+                     <div className="flex items-center gap-1">
+                        {!isMe && voice.micEnabled && (
+                          <button
+                            onClick={() => voice.togglePlayerMute(s.player_id)}
+                            className={`text-xs px-2 py-1 rounded transition ${
+                              voice.mutedPlayers.has(s.player_id)
+                                ? 'text-red-400/80 hover:text-red-300'
+                                : 'text-emerald-200/50 hover:text-emerald-200'
+                            }`}
+                            title={voice.mutedPlayers.has(s.player_id) ? `Unmute ${s.name}` : `Mute ${s.name}`}
+                          >
+                            {voice.mutedPlayers.has(s.player_id) ? '🔇' : '🔊'}
+                          </button>
+                        )}
                         {!s.has_drawn && (
                           <span className="text-xs text-amber-300/60 italic">picking...</span>
                         )}
