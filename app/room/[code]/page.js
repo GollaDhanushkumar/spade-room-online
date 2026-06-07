@@ -21,6 +21,8 @@ import { useSounds } from '@/lib/useSounds';
 import ThemePicker from '@/components/ThemePicker';
 import { useRoomTheme } from '@/lib/useRoomTheme';
 import ThemeAnimation from '@/components/ThemeAnimation';
+import MicToggle from '@/components/MicToggle';
+import { useVoiceChat } from '@/lib/useVoiceChat';
 import InstallAppButton from '@/components/InstallAppButton';
 
 
@@ -53,6 +55,15 @@ export default function RoomPage({ params }) {
   useHostPromotion(code, me?.playerId);
   const sounds = useSounds();
   useRoomTheme(room);
+
+  const otherPlayerIds = players
+    .filter((p) => p.id !== me?.playerId)
+    .map((p) => p.id);
+  const voice = useVoiceChat({
+    roomCode: code,
+    myPlayerId: me?.playerId,
+    otherPlayerIds,
+  });
 
   useEffect(() => {
     const saved = localStorage.getItem(`spade-room-${code}`);
@@ -348,6 +359,7 @@ export default function RoomPage({ params }) {
       style={{ background: `linear-gradient(to bottom, var(--theme-bg-from, #0a1410), var(--theme-bg-to, #0f3d2c))` }}>
         <ThemeAnimation room={room} />
        <SoundToggle enabled={sounds.enabled} onToggle={sounds.toggle} className="fixed top-3 left-3 z-30" />
+       <MicToggle enabled={voice.micEnabled} onToggle={voice.toggleMic} className="fixed top-3 left-16 z-30" />
 
       {/* Floating action buttons — top right */}
       <div className="fixed top-3 right-3 z-30 flex items-center gap-2">
@@ -407,8 +419,19 @@ export default function RoomPage({ params }) {
               const isMe = me && p.id === me.playerId;
               return (
                 <li key={p.id} className="flex items-center justify-between px-4 py-3 rounded-xl bg-[#14271f] border border-emerald-900/50">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <Avatar avatarId={p.avatar_id} playerName={p.name} size="sm" />
+                 <div className="flex items-center gap-3 min-w-0">
+                    <div className="relative">
+                      <Avatar avatarId={p.avatar_id} playerName={p.name} size="sm" />
+                      {voice.talkingPlayers.has(p.id) && (
+                        <span
+                          className="absolute inset-0 rounded-full pointer-events-none"
+                          style={{
+                            boxShadow: '0 0 0 2px #4ade80, 0 0 12px #4ade80',
+                            animation: 'talkingPulse 0.8s ease-in-out infinite',
+                          }}
+                        />
+                      )}
+                    </div>
                     <span className="font-medium truncate">
                       {p.name}
                       {isMe && <span className="text-emerald-200/40 text-xs ml-2">(you)</span>}
