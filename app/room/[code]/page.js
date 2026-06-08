@@ -16,8 +16,6 @@ import { useHostPromotion } from '@/lib/useHostPromotion';
 import Avatar from '@/components/Avatar';
 import RejoinPrompt from '@/components/RejoinPrompt';
 import MatchHistoryModal from '@/components/MatchHistory';
-import SoundToggle from '@/components/SoundToggle';
-import { useSounds } from '@/lib/useSounds';
 import ThemePicker from '@/components/ThemePicker';
 import { useRoomTheme } from '@/lib/useRoomTheme';
 import ThemeAnimation from '@/components/ThemeAnimation';
@@ -53,7 +51,6 @@ export default function RoomPage({ params }) {
 
   usePresence(me?.playerId);
   useHostPromotion(code, me?.playerId);
-  const sounds = useSounds();
   useRoomTheme(room);
 
   const otherPlayerIds = players
@@ -358,7 +355,6 @@ export default function RoomPage({ params }) {
     <main className="min-h-screen text-emerald-50 px-6 py-10 relative"
       style={{ background: `linear-gradient(to bottom, var(--theme-bg-from, #0a1410), var(--theme-bg-to, #0f3d2c))` }}>
         <ThemeAnimation room={room} />
-     <SoundToggle enabled={sounds.enabled} onToggle={sounds.toggle} className="fixed top-3 left-3 z-30" />
        <VoicePanel
          voice={voice}
          players={players.map((p) => ({ player_id: p.id, name: p.name, avatar_id: p.avatar_id }))}

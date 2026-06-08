@@ -13,6 +13,7 @@ import { cardRankLabel, suitSymbol, suitColor } from '@/lib/game-logic';
  */
 export default function PlayingCard({ card, size = 'md', faceDown = false, className = '' }) {
   const sizes = {
+    xs: { w: 28, h: 40 },
     sm: { w: 44, h: 62 },
     md: { w: 64, h: 90 },
     lg: { w: 88, h: 124 },

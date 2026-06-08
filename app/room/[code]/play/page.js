@@ -18,9 +18,9 @@ import {
 } from '@/lib/game-logic';
 import PlayingCard from '@/components/PlayingCard';
 import MatchOverlay from '@/components/MatchOverlay';
+import TricksWonModal from '@/components/TricksWonModal';
 import Avatar from '@/components/Avatar';
 import AnimatedScore from '@/components/AnimatedScore';
-import SoundToggle from '@/components/SoundToggle';
 import VoicePanel from '@/components/VoicePanel';
 import { useVoiceChat } from '@/lib/useVoiceChat';
 import SpectatorBadge from '@/components/SpectatorBadge';
@@ -53,6 +53,7 @@ export default function PlayPage({ params }) {
   const [skipping, setSkipping] = useState(false);
   const [iAmSpectator, setIAmSpectator] = useState(false);
   const [showSpectatorWelcome, setShowSpectatorWelcome] = useState(false);
+  const [showTricksWon, setShowTricksWon] = useState(false);
   const bidDebounceRef = useRef(null);
   const localBidRef = useRef(null); // tracks my optimistic bid value, ignores stale realtime updates
   
@@ -811,7 +812,16 @@ async function handleLockIndivBid() {
         onLeaveRoom={handleLeaveRoom}
         playingAgain={playingAgain}
       />
-      <MatchOverlay {...overlayProps} />
+      <MatchOverlay {...overlayProps} />{showTricksWon && (
+        <TricksWonModal
+          onClose={() => setShowTricksWon(false)}
+          seatedPlayers={seatedPlayers}
+          trickHistory={round?.trick_history || []}
+          mePlayerId={me?.playerId}
+          roundNum={game?.current_round || 1}
+        />
+      )}
+
       </>
     );
   }
@@ -825,7 +835,16 @@ async function handleLockIndivBid() {
         {showSpectatorWelcome && <SpectatorWelcome onDismiss={dismissSpectatorWelcome} />}
         <main className="min-h-screen text-emerald-50 px-5 py-7"
         style={{ background: `linear-gradient(to bottom, var(--theme-bg-from, #0a1410), var(--theme-bg-to, #0f3d2c))` }}>
-         <SoundToggle enabled={sounds.enabled} onToggle={sounds.toggle} className="fixed top-3 left-3 z-30" />
+         {(round?.trick_history?.length ?? 0) > 0 && (
+  <button
+    onClick={() => setShowTricksWon(true)}
+    className="fixed top-3 left-3 z-30 w-11 h-11 rounded-full bg-[#0f1d18] border border-emerald-900 shadow-lg hover:bg-[#14271f] hover:border-amber-300/40 transition flex items-center justify-center text-lg"
+    title="View tricks won this round"
+    aria-label="Tricks won this round"
+  >
+    🃏
+  </button>
+)}
 <VoicePanel
   voice={voice}
   players={seatedPlayers.map((s) => ({ player_id: s.player_id, name: s.name, avatar_id: s.avatar_id }))}
@@ -918,6 +937,15 @@ async function handleLockIndivBid() {
           </div>
         </main>
         <MatchOverlay {...overlayProps} />
+        {showTricksWon && (
+        <TricksWonModal
+          onClose={() => setShowTricksWon(false)}
+          seatedPlayers={seatedPlayers}
+          trickHistory={round?.trick_history || []}
+          mePlayerId={me?.playerId}
+          roundNum={game?.current_round || 1}
+        />
+      )}
         </>
       );
     }
@@ -927,7 +955,16 @@ async function handleLockIndivBid() {
       {showSpectatorWelcome && <SpectatorWelcome onDismiss={dismissSpectatorWelcome} />}
       <main className="min-h-screen text-emerald-50 px-5 py-7"
         style={{ background: `linear-gradient(to bottom, var(--theme-bg-from, #0a1410), var(--theme-bg-to, #0f3d2c))` }}>
-        <SoundToggle enabled={sounds.enabled} onToggle={sounds.toggle} className="fixed top-3 left-3 z-30" />
+        {(round?.trick_history?.length ?? 0) > 0 && (
+  <button
+    onClick={() => setShowTricksWon(true)}
+    className="fixed top-3 left-3 z-30 w-11 h-11 rounded-full bg-[#0f1d18] border border-emerald-900 shadow-lg hover:bg-[#14271f] hover:border-amber-300/40 transition flex items-center justify-center text-lg"
+    title="View tricks won this round"
+    aria-label="Tricks won this round"
+  >
+    🃏
+  </button>
+)}
 <VoicePanel
   voice={voice}
   players={seatedPlayers.map((s) => ({ player_id: s.player_id, name: s.name, avatar_id: s.avatar_id }))}
@@ -1146,6 +1183,15 @@ async function handleLockIndivBid() {
         </div>
       </main>
       <MatchOverlay {...overlayProps} />
+      {showTricksWon && (
+        <TricksWonModal
+          onClose={() => setShowTricksWon(false)}
+          seatedPlayers={seatedPlayers}
+          trickHistory={round?.trick_history || []}
+          mePlayerId={me?.playerId}
+          roundNum={game?.current_round || 1}
+        />
+      )}
       </>
     );
   }
@@ -1156,7 +1202,16 @@ async function handleLockIndivBid() {
       {showSpectatorWelcome && <SpectatorWelcome onDismiss={dismissSpectatorWelcome} />}
       <main className="min-h-screen text-emerald-50 px-5 py-7"
         style={{ background: `linear-gradient(to bottom, var(--theme-bg-from, #0a1410), var(--theme-bg-to, #0f3d2c))` }}>
-        <SoundToggle enabled={sounds.enabled} onToggle={sounds.toggle} className="fixed top-3 left-3 z-30" />
+        {(round?.trick_history?.length ?? 0) > 0 && (
+  <button
+    onClick={() => setShowTricksWon(true)}
+    className="fixed top-3 left-3 z-30 w-11 h-11 rounded-full bg-[#0f1d18] border border-emerald-900 shadow-lg hover:bg-[#14271f] hover:border-amber-300/40 transition flex items-center justify-center text-lg"
+    title="View tricks won this round"
+    aria-label="Tricks won this round"
+  >
+    🃏
+  </button>
+)}
 <VoicePanel
   voice={voice}
   players={seatedPlayers.map((s) => ({ player_id: s.player_id, name: s.name, avatar_id: s.avatar_id }))}
@@ -1252,6 +1307,15 @@ async function handleLockIndivBid() {
        </div>
       </main>
       <MatchOverlay {...overlayProps} />
+      {showTricksWon && (
+        <TricksWonModal
+          onClose={() => setShowTricksWon(false)}
+          seatedPlayers={seatedPlayers}
+          trickHistory={round?.trick_history || []}
+          mePlayerId={me?.playerId}
+          roundNum={game?.current_round || 1}
+        />
+      )}
       </>
     );
   }
@@ -1270,7 +1334,16 @@ async function handleLockIndivBid() {
         {showSpectatorWelcome && <SpectatorWelcome onDismiss={dismissSpectatorWelcome} />}
         <main className="min-h-screen text-emerald-50 px-3 py-5 flex flex-col"
         style={{ background: `linear-gradient(to bottom, var(--theme-bg-from, #0a1410), var(--theme-bg-to, #0f3d2c))` }}>
-          <SoundToggle enabled={sounds.enabled} onToggle={sounds.toggle} className="fixed top-3 left-3 z-30" />
+         {(round?.trick_history?.length ?? 0) > 0 && (
+  <button
+    onClick={() => setShowTricksWon(true)}
+    className="fixed top-3 left-3 z-30 w-11 h-11 rounded-full bg-[#0f1d18] border border-emerald-900 shadow-lg hover:bg-[#14271f] hover:border-amber-300/40 transition flex items-center justify-center text-lg"
+    title="View tricks won this round"
+    aria-label="Tricks won this round"
+  >
+    🃏
+  </button>
+)}
 <VoicePanel
   voice={voice}
   players={seatedPlayers.map((s) => ({ player_id: s.player_id, name: s.name, avatar_id: s.avatar_id }))}
@@ -1342,6 +1415,15 @@ async function handleLockIndivBid() {
           </div>
         </main>
         <MatchOverlay {...overlayProps} />
+        {showTricksWon && (
+        <TricksWonModal
+          onClose={() => setShowTricksWon(false)}
+          seatedPlayers={seatedPlayers}
+          trickHistory={round?.trick_history || []}
+          mePlayerId={me?.playerId}
+          roundNum={game?.current_round || 1}
+        />
+      )}
         </>
       );
     }
@@ -1351,7 +1433,16 @@ async function handleLockIndivBid() {
       {showSpectatorWelcome && <SpectatorWelcome onDismiss={dismissSpectatorWelcome} />}
       <main className="min-h-screen text-emerald-50 px-3 py-5 flex flex-col"
         style={{ background: `linear-gradient(to bottom, var(--theme-bg-from, #0a1410), var(--theme-bg-to, #0f3d2c))` }}>
-        <SoundToggle enabled={sounds.enabled} onToggle={sounds.toggle} className="fixed top-3 left-3 z-30" />
+       {(round?.trick_history?.length ?? 0) > 0 && (
+  <button
+    onClick={() => setShowTricksWon(true)}
+    className="fixed top-3 left-3 z-30 w-11 h-11 rounded-full bg-[#0f1d18] border border-emerald-900 shadow-lg hover:bg-[#14271f] hover:border-amber-300/40 transition flex items-center justify-center text-lg"
+    title="View tricks won this round"
+    aria-label="Tricks won this round"
+  >
+    🃏
+  </button>
+)}
 <VoicePanel
   voice={voice}
   players={seatedPlayers.map((s) => ({ player_id: s.player_id, name: s.name, avatar_id: s.avatar_id }))}
@@ -1477,6 +1568,15 @@ async function handleLockIndivBid() {
         </div>
       </main>
       <MatchOverlay {...overlayProps} />
+      {showTricksWon && (
+        <TricksWonModal
+          onClose={() => setShowTricksWon(false)}
+          seatedPlayers={seatedPlayers}
+          trickHistory={round?.trick_history || []}
+          mePlayerId={me?.playerId}
+          roundNum={game?.current_round || 1}
+        />
+      )}
       </>
     );
   }
