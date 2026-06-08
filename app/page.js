@@ -7,6 +7,7 @@ import { pickRandomAvatar, getAvatarById } from '@/lib/avatars';
 import AvatarPicker from '@/components/AvatarPicker';
 import Avatar from '@/components/Avatar';
 import InstallAppButton from '@/components/InstallAppButton';
+import SplashScreen from '@/components/SplashScreen';
 
 const SAFE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
@@ -28,6 +29,7 @@ function generateToken() {
 
 export default function HomePage() {
   const router = useRouter();
+  const [showSplash, setShowSplash] = useState(true);
   const [mode, setMode] = useState(null); // null | 'create' | 'join'
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
@@ -137,7 +139,9 @@ export default function HomePage() {
 
   if (mode === null) {
     return (
-      <main className="min-h-screen flex items-center justify-center bg-gradient-to-b from-[#0a1410] to-[#0f3d2c] px-6">
+      <>
+        {showSplash && <SplashScreen onDone={() => setShowSplash(false)} />}
+        <main className="min-h-screen flex items-center justify-center bg-gradient-to-b from-[#0a1410] to-[#0f3d2c] px-6">
         <div className="max-w-sm w-full text-center">
           <p className="text-xs uppercase tracking-widest text-emerald-200/60 mb-2">welcome to</p>
           <h1 className="text-4xl font-serif italic text-amber-200 mb-2">The Spade Room</h1>
@@ -164,6 +168,7 @@ export default function HomePage() {
           </div>
         </div>
       </main>
+      </>
     );
   }
 
