@@ -452,7 +452,7 @@ async function handleLockIndivBid() {
     if (!itsMyTurn || playing) return;
     if (!legalIndices.has(handIdx)) return;
     setPlaying(true);
-    sounds.play('cardPlay');
+    // sounds.play('cardPlay');
 
     const card = myHand[handIdx];
     const newHand = [...myHand.slice(0, handIdx), ...myHand.slice(handIdx + 1)];
@@ -593,8 +593,12 @@ async function handleLockIndivBid() {
         myTotal = indivTotals[me?.playerId] ?? 0;
       }
 
-      if (myTotal === winningTotal && allTotals.length > 0) {
-        sounds.play('matchWin');
+      if (allTotals.length > 0) {
+        if (myTotal === winningTotal) {
+          sounds.play('matchWin');
+        } else {
+          sounds.play('matchLose');
+        }
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -608,7 +612,7 @@ async function handleLockIndivBid() {
     if (newLen > prevLen && newLen > 0) {
       const lastEntry = currentTrick[newLen - 1];
       if (lastEntry?.player_id !== me?.playerId) {
-        sounds.play('cardPlay');
+        // sounds.play('cardPlay');
       }
     }
     prevTrickLenRef.current = newLen;
