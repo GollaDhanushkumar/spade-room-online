@@ -32,6 +32,18 @@ import { useHostPromotion } from '@/lib/useHostPromotion';
 import { useRoomTheme } from '@/lib/useRoomTheme';
 import CardBack from '@/components/CardBack';
 
+// Detect mobile for responsive table sizing
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
+  return isMobile;
+}
+
 // Sort a hand: by suit (Spades, Hearts, Clubs, Diamonds), then by rank low to high
 const SUIT_ORDER = { spades: 0, hearts: 1, clubs: 2, diamonds: 3 };
 function sortHand(cards) {
@@ -1914,13 +1926,17 @@ function PlayTable({ seats, allHands, mySeat, currentTrick, currentPlayerSeatIdx
   };
   const trickPositions = trickPosByN[N] ?? trickPosByN[4];
 
-  // Felt scales slightly bigger for more players to give cards more room
-  const feltSize = N <= 4 ? 52 : N <= 6 ? 58 : 62;
-  // Cards arranged in an even ring around the center of the felt
+ const isMobile = useIsMobile();
   const totalTricks = currentTrick.length;
-  // Ring radius (as % of container) — slightly smaller than felt edge
-  const ringRadius = N <= 4 ? 14 : N <= 6 ? 17 : 19;
-  const cardSize = N <= 4 ? 'md' : 'sm';
+  // Felt scales slightly bigger for more players to give cards more room.
+  // On mobile, felt is larger and cards/ring are smaller so nothing overflows.
+  const feltSize = isMobile
+    ? (N <= 4 ? 62 : N <= 6 ? 70 : 76)
+    : (N <= 4 ? 52 : N <= 6 ? 58 : 62);
+  const ringRadius = isMobile
+    ? (N <= 4 ? 12 : N <= 6 ? 14 : 16)
+    : (N <= 4 ? 14 : N <= 6 ? 17 : 19);
+  const cardSize = isMobile ? 'xs' : (N <= 4 ? 'md' : 'sm');
 
   return (
     <div className="relative w-full flex-1" style={{ minHeight: 380 }}>
@@ -2253,11 +2269,16 @@ function SpectatorTable({ seats, allHands, currentTrick, currentPlayerSeatIdx, r
   };
   const trickPositions = trickPosByN[N] ?? trickPosByN[4];
 
-  // Felt scales slightly bigger for more players
-  const feltSize = N <= 4 ? 52 : N <= 6 ? 58 : 62;
+const isMobile = useIsMobile();
   const totalTricks = currentTrick.length;
-  const ringRadius = N <= 4 ? 14 : N <= 6 ? 17 : 19;
-  const cardSize = N <= 4 ? 'md' : 'sm';
+  // On mobile, felt is larger and cards/ring are smaller so nothing overflows.
+  const feltSize = isMobile
+    ? (N <= 4 ? 62 : N <= 6 ? 70 : 76)
+    : (N <= 4 ? 52 : N <= 6 ? 58 : 62);
+  const ringRadius = isMobile
+    ? (N <= 4 ? 12 : N <= 6 ? 14 : 16)
+    : (N <= 4 ? 14 : N <= 6 ? 17 : 19);
+  const cardSize = isMobile ? 'xs' : (N <= 4 ? 'md' : 'sm');
 
   return (
     <div className="relative w-full flex-1" style={{ minHeight: 460 }}>
