@@ -19,6 +19,7 @@ import {
 import PlayingCard from '@/components/PlayingCard';
 import MatchOverlay from '@/components/MatchOverlay';
 import TricksWonModal from '@/components/TricksWonModal';
+import VictoryEgg from '@/components/VictoryEgg';
 import Avatar from '@/components/Avatar';
 import AnimatedScore from '@/components/AnimatedScore';
 import VoicePanel from '@/components/VoicePanel';
@@ -65,6 +66,7 @@ export default function PlayPage({ params }) {
   const [iAmSpectator, setIAmSpectator] = useState(false);
   const [showSpectatorWelcome, setShowSpectatorWelcome] = useState(false);
   const [showTricksWon, setShowTricksWon] = useState(false);
+  const [showVictoryEgg, setShowVictoryEgg] = useState(false);
   const bidDebounceRef = useRef(null);
   const localBidRef = useRef(null); // tracks my optimistic bid value, ignores stale realtime updates
   
@@ -575,12 +577,17 @@ async function handleLockIndivBid() {
   const prevCompletedRef = useRef(false);
   useEffect(() => {
     if (game?.status === 'completed' && !prevCompletedRef.current) {
+      // Wait until we have round data loaded before deciding
+      if (!allRounds || allRounds.length === 0) return;
+      if (!seats || seats.length === 0) return;
+
       prevCompletedRef.current = true;
 
       let myTotal = 0;
       let winningTotal = -Infinity;
       let allTotals = [];
 
+      // ── Calculate totals for sound effect ──
       if (isTeamMode) {
         const teamTotals = {};
         for (const r of allRounds) {
@@ -612,9 +619,48 @@ async function handleLockIndivBid() {
           sounds.play('matchLose');
         }
       }
+
+      // ── EASTER EGG: Dhanush victory popup (shows for EVERYONE) ──
+      const isDhanushIdentifier = (name, avatarId) => {
+        const lower = (name || '').toLowerCase().trim();
+        return lower === 'dhanush' || avatarId === 'dhanush';
+      };
+
+      let dhanushWon = false;
+      if (isTeamMode) {
+        const teamTotals = {};
+        for (const r of allRounds) {
+          if (!r.team_scores) continue;
+          for (const [tId, score] of Object.entries(r.team_scores)) {
+            teamTotals[tId] = (teamTotals[tId] ?? 0) + score;
+          }
+        }
+        const sortedTeams = Object.entries(teamTotals).sort((a, b) => b[1] - a[1]);
+        const winningTeamId = sortedTeams[0]?.[0];
+        const winningSeats = seats.filter((s) => s.team_id === winningTeamId);
+        dhanushWon = winningSeats.some((s) => isDhanushIdentifier(s.name, s.avatar_id));
+      } else {
+        const indivTotals = {};
+        for (const r of allRounds) {
+          if (!r.scores) continue;
+          for (const [pid, score] of Object.entries(r.scores)) {
+            indivTotals[pid] = (indivTotals[pid] ?? 0) + score;
+          }
+        }
+        const sortedPlayers = Object.entries(indivTotals).sort((a, b) => b[1] - a[1]);
+        const winnerId = sortedPlayers[0]?.[0];
+        const winnerSeat = seats.find((s) => s.player_id === winnerId);
+        if (winnerSeat) {
+          dhanushWon = isDhanushIdentifier(winnerSeat.name, winnerSeat.avatar_id);
+        }
+      }
+
+      if (dhanushWon) {
+        setTimeout(() => setShowVictoryEgg(true), 3000);
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [game?.status]);
+  }, [game?.status, allRounds, seats]);
 
   // Play card sound when any card lands in the trick (from anyone)
   const prevTrickLenRef = useRef(0);
@@ -832,6 +878,7 @@ async function handleLockIndivBid() {
           roundNum={game?.current_round || 1}
         />
       )}
+       {showVictoryEgg && <VictoryEgg onDone={() => setShowVictoryEgg(false)} />}
 
       </>
     );
