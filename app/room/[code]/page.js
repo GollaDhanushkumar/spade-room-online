@@ -376,22 +376,20 @@ export default function RoomPage({ params }) {
           </button>
         )}
 
-       {iAmHost && (
-          <button
-            onClick={() => setShowHistory(true)}
-            className="flex items-center gap-1.5 px-3 h-11 rounded-full bg-[#0f1d18] border border-emerald-900 shadow-lg hover:bg-[#14271f] hover:border-amber-300/40 transition"
-            title="Match history"
-            aria-label="Match history"
-          >
-            <span className="text-lg">📜</span>
-            <span className="text-xs text-emerald-200/80 font-medium">History</span>
-            {matchCount > 0 && (
-              <span className="ml-1 text-[10px] bg-amber-300 text-[#07100c] rounded-full px-1.5 py-0.5 font-bold">
-                {matchCount}
-              </span>
-            )}
-          </button>
-        )}
+<button
+          onClick={() => setShowHistory(true)}
+          className="flex items-center gap-1.5 px-3 h-11 rounded-full bg-[#0f1d18] border border-emerald-900 shadow-lg hover:bg-[#14271f] hover:border-amber-300/40 transition"
+          title="Match history & rankings"
+          aria-label="Match history and rankings"
+        >
+          <span className="text-lg">📜</span>
+          <span className="text-xs text-emerald-200/80 font-medium">History</span>
+          {matchCount > 0 && (
+            <span className="ml-1 text-[10px] bg-amber-300 text-[#07100c] rounded-full px-1.5 py-0.5 font-bold">
+              {matchCount}
+            </span>
+          )}
+        </button>
       </div>
 
       <div className="max-w-md mx-auto">
@@ -517,9 +515,9 @@ export default function RoomPage({ params }) {
         />
       )}
 
-        {/* History modal — host only */}
-      {showHistory && iAmHost && (
-        <MatchHistoryModal code={code} onClose={() => setShowHistory(false)} />
+        {/* History modal — visible to all players, hosts can manage rankings */}
+      {showHistory && (
+        <MatchHistoryModal code={code} onClose={() => setShowHistory(false)} iAmHost={iAmHost} />
       )}
 
       {/* Leave confirmation */}

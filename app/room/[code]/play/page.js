@@ -31,6 +31,17 @@ import { useHostPromotion } from '@/lib/useHostPromotion';
 import { useRoomTheme } from '@/lib/useRoomTheme';
 import CardBack from '@/components/CardBack';
 
+// Sort a hand: by suit (Spades, Hearts, Clubs, Diamonds), then by rank low to high
+const SUIT_ORDER = { spades: 0, hearts: 1, clubs: 2, diamonds: 3 };
+function sortHand(cards) {
+  if (!Array.isArray(cards)) return cards;
+  return [...cards].sort((a, b) => {
+    const suitDiff = (SUIT_ORDER[a.suit] ?? 99) - (SUIT_ORDER[b.suit] ?? 99);
+    if (suitDiff !== 0) return suitDiff;
+    return (a.value ?? 0) - (b.value ?? 0);
+  });
+}
+
 export default function PlayPage({ params }) {
   const { code } = use(params);
   const router = useRouter();
@@ -985,7 +996,7 @@ async function handleLockIndivBid() {
             <p className="text-xs uppercase tracking-widest text-emerald-200/60 text-center mb-3">Your hand</p>
             <div className="flex items-center justify-center gap-1.5 flex-wrap">
               {myHand.length === 0 && <p className="text-emerald-200/40 text-sm italic">Waiting for deal...</p>}
-              {myHand.map((c, i) => (<PlayingCard key={i} card={c} size="md" />))}
+              {sortHand(myHand).map((c, i) => (<PlayingCard key={`${c.suit}-${c.value}-${i}`} card={c} size="md" />))}
             </div>
           </div>
 
@@ -1546,11 +1557,12 @@ async function handleLockIndivBid() {
             </p>
             <div className="flex items-center justify-center gap-1.5 flex-wrap">
               {myHand.length === 0 && <p className="text-emerald-200/40 text-sm italic py-3">No cards left</p>}
-              {myHand.map((c, i) => {
-                const isLegal = legalIndices.has(i);
+              {sortHand(myHand.map((c, i) => ({ ...c, _originalIndex: i }))).map((c) => {
+                const originalIdx = c._originalIndex;
+                const isLegal = legalIndices.has(originalIdx);
                 const canTap = itsMyTurn && isLegal && !playing;
                 return (
-                  <button key={i} onClick={() => canTap && handlePlayCard(i)} disabled={!canTap}
+                  <button key={`${c.suit}-${c.value}-${originalIdx}`} onClick={() => canTap && handlePlayCard(originalIdx)} disabled={!canTap}
                     className="transition-transform"
                     style={{
                       opacity: itsMyTurn && !isLegal ? 0.35 : 1,
@@ -1855,12 +1867,20 @@ function PlayTable({ seats, allHands, mySeat, currentTrick, currentPlayerSeatIdx
   };
   const trickPositions = trickPosByN[N] ?? trickPosByN[4];
 
+  // Felt scales slightly bigger for more players to give cards more room
+  const feltSize = N <= 4 ? 52 : N <= 6 ? 58 : 62;
+  // Cards arranged in an even ring around the center of the felt
+  const totalTricks = currentTrick.length;
+  // Ring radius (as % of container) — slightly smaller than felt edge
+  const ringRadius = N <= 4 ? 14 : N <= 6 ? 17 : 19;
+  const cardSize = N <= 4 ? 'md' : 'sm';
+
   return (
     <div className="relative w-full flex-1" style={{ minHeight: 380 }}>
       <div className="absolute"
         style={{
           left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
-          width: '52%', aspectRatio: '1',
+          width: `${feltSize}%`, aspectRatio: '1',
           borderRadius: '50%',
           background: `radial-gradient(circle at 50% 45%, var(--theme-felt-from, #1f5e44) 0%, var(--theme-felt-mid, #0f3d2c) 60%, var(--theme-felt-to, #0a2519) 100%)`,
           border: '1px solid rgba(212, 182, 117, 0.35)',
@@ -1869,15 +1889,16 @@ function PlayTable({ seats, allHands, mySeat, currentTrick, currentPlayerSeatIdx
       />
 
       {currentTrick.map((entry, i) => {
-        const seat = seats.find((s) => s.player_id === entry.player_id);
-        const relIdx = seat ? ((seat.seat_index - mySeatIdx + N) % N) : 0;
-        const pos = trickPositions[relIdx] ?? trickPositions[0];
+        // Evenly space cards in a circle. First card at top, going clockwise.
+        const angle = (i / Math.max(1, totalTricks)) * 2 * Math.PI - Math.PI / 2;
+        const left = 50 + ringRadius * Math.cos(angle);
+        const top = 50 + ringRadius * Math.sin(angle);
         const isWinner = revealedWinner && revealedWinner.player_id === entry.player_id;
         return (
           <div key={`played-${i}`}
             className="absolute"
             style={{
-              left: `${pos.l}%`, top: `${pos.t}%`,
+              left: `${left}%`, top: `${top}%`,
               transform: 'translate(-50%, -50%)',
               animation: 'cardSlideIn 0.3s ease both',
               zIndex: 10 + i,
@@ -1888,7 +1909,7 @@ function PlayTable({ seats, allHands, mySeat, currentTrick, currentPlayerSeatIdx
               transform: 'translateY(-4px)',
               transition: 'all 0.3s',
             } : undefined}>
-              <PlayingCard card={entry.card} size="md" />
+              <PlayingCard card={entry.card} size={cardSize} />
             </div>
           </div>
         );
@@ -2185,13 +2206,19 @@ function SpectatorTable({ seats, allHands, currentTrick, currentPlayerSeatIdx, r
   };
   const trickPositions = trickPosByN[N] ?? trickPosByN[4];
 
+  // Felt scales slightly bigger for more players
+  const feltSize = N <= 4 ? 52 : N <= 6 ? 58 : 62;
+  const totalTricks = currentTrick.length;
+  const ringRadius = N <= 4 ? 14 : N <= 6 ? 17 : 19;
+  const cardSize = N <= 4 ? 'md' : 'sm';
+
   return (
     <div className="relative w-full flex-1" style={{ minHeight: 460 }}>
       {/* Central felt table */}
       <div className="absolute"
         style={{
           left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
-          width: '52%', aspectRatio: '1',
+          width: `${feltSize}%`, aspectRatio: '1',
           borderRadius: '50%',
           background: 'radial-gradient(circle at 50% 45%, #1f5e44 0%, #0f3d2c 60%, #0a2519 100%)',
           border: '1px solid rgba(212, 182, 117, 0.35)',
@@ -2199,15 +2226,17 @@ function SpectatorTable({ seats, allHands, currentTrick, currentPlayerSeatIdx, r
         }}
       />
 
-      {/* Cards played in current trick (center) */}
+      {/* Cards played in current trick — evenly spaced in a circle */}
       {currentTrick.map((entry, i) => {
-        const pos = trickPositions[entry.seat_index % N] ?? trickPositions[0];
+        const angle = (i / Math.max(1, totalTricks)) * 2 * Math.PI - Math.PI / 2;
+        const left = 50 + ringRadius * Math.cos(angle);
+        const top = 50 + ringRadius * Math.sin(angle);
         const isWinner = revealedWinner && revealedWinner.player_id === entry.player_id;
         return (
           <div key={`played-${i}`}
             className="absolute"
             style={{
-              left: `${pos.l}%`, top: `${pos.t}%`,
+              left: `${left}%`, top: `${top}%`,
               transform: 'translate(-50%, -50%)',
               animation: 'cardSlideInSpec 0.3s ease both',
               zIndex: 10 + i,
@@ -2218,7 +2247,7 @@ function SpectatorTable({ seats, allHands, currentTrick, currentPlayerSeatIdx, r
               transform: 'translateY(-4px)',
               transition: 'all 0.3s',
             } : undefined}>
-              <PlayingCard card={entry.card} size="md" />
+              <PlayingCard card={entry.card} size={cardSize} />
             </div>
           </div>
         );

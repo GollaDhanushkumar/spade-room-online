@@ -30,15 +30,15 @@ export default function TricksWonModal({ onClose, seatedPlayers, trickHistory, m
     tricksByWinner[wid].push(trick.cards);
   }
 
-  // Position seats in a circle, "me" at the bottom
+  // Position seats in a circle, "me" at the bottom — pulled inward for breathing room
   const positionsByN = {
-    2: [{ l: 50, t: 78 }, { l: 50, t: 22 }],
-    3: [{ l: 50, t: 80 }, { l: 82, t: 32 }, { l: 18, t: 32 }],
-    4: [{ l: 50, t: 82 }, { l: 82, t: 50 }, { l: 50, t: 18 }, { l: 18, t: 50 }],
-    5: [{ l: 50, t: 82 }, { l: 85, t: 58 }, { l: 72, t: 20 }, { l: 28, t: 20 }, { l: 15, t: 58 }],
-    6: [{ l: 50, t: 84 }, { l: 84, t: 60 }, { l: 80, t: 24 }, { l: 50, t: 16 }, { l: 20, t: 24 }, { l: 16, t: 60 }],
-    7: [{ l: 50, t: 85 }, { l: 84, t: 64 }, { l: 82, t: 30 }, { l: 62, t: 16 }, { l: 38, t: 16 }, { l: 18, t: 30 }, { l: 16, t: 64 }],
-    8: [{ l: 50, t: 86 }, { l: 82, t: 68 }, { l: 86, t: 42 }, { l: 70, t: 18 }, { l: 50, t: 14 }, { l: 30, t: 18 }, { l: 14, t: 42 }, { l: 18, t: 68 }],
+    2: [{ l: 50, t: 75 }, { l: 50, t: 25 }],
+    3: [{ l: 50, t: 78 }, { l: 78, t: 35 }, { l: 22, t: 35 }],
+    4: [{ l: 50, t: 78 }, { l: 78, t: 50 }, { l: 50, t: 22 }, { l: 22, t: 50 }],
+    5: [{ l: 50, t: 78 }, { l: 80, t: 58 }, { l: 70, t: 25 }, { l: 30, t: 25 }, { l: 20, t: 58 }],
+    6: [{ l: 50, t: 80 }, { l: 80, t: 60 }, { l: 75, t: 28 }, { l: 50, t: 22 }, { l: 25, t: 28 }, { l: 20, t: 60 }],
+    7: [{ l: 50, t: 82 }, { l: 80, t: 62 }, { l: 78, t: 32 }, { l: 60, t: 22 }, { l: 40, t: 22 }, { l: 22, t: 32 }, { l: 20, t: 62 }],
+    8: [{ l: 50, t: 82 }, { l: 78, t: 66 }, { l: 82, t: 42 }, { l: 68, t: 22 }, { l: 50, t: 18 }, { l: 32, t: 22 }, { l: 18, t: 42 }, { l: 22, t: 66 }],
   };
   const positions = positionsByN[N] ?? positionsByN[4];
 
@@ -48,7 +48,7 @@ export default function TricksWonModal({ onClose, seatedPlayers, trickHistory, m
       onClick={onClose}
     >
       <div
-        className="bg-[#0f1d18] border border-emerald-900 rounded-2xl w-full max-w-2xl max-h-[92vh] overflow-hidden flex flex-col"
+        className="bg-[#0f1d18] border border-emerald-900 rounded-2xl w-full max-w-md max-h-[92vh] overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-3 border-b border-emerald-900/50">
@@ -75,7 +75,7 @@ export default function TricksWonModal({ onClose, seatedPlayers, trickHistory, m
               <p className="text-emerald-200/40 text-xs mt-1">Captured cards will appear here as tricks are won.</p>
             </div>
           ) : (
-            <div className="relative w-full" style={{ minHeight: 460, aspectRatio: '1 / 1', maxWidth: 560, margin: '0 auto' }}>
+            <div className="relative w-full" style={{ minHeight: 380, aspectRatio: '1 / 1', maxWidth: 420, margin: '0 auto', padding: '20px 30px' }}>
               {/* Felt circle */}
               <div className="absolute"
                 style={{
@@ -148,11 +148,11 @@ function PlayerCapturedPile({ seat, isMe, tricks, teamColor }) {
           <div className="text-[10px] text-emerald-200/30 italic px-2 py-1">No tricks won</div>
         ) : (
           tricks.map((trickCards, trickIdx) => (
-           <div key={trickIdx} className="relative" style={{
+            <div key={trickIdx} className="relative" style={{
               width: Math.max(20, 20 + ((trickCards?.length ?? 0) - 1) * 7),
               height: 36,
             }}>
-             {(trickCards || []).map((entry, cardIdx) => {
+              {(trickCards || []).map((entry, cardIdx) => {
                 // Each entry might be { player_id, seat_index, card } or just a card object
                 const card = entry?.card ?? entry;
                 return (

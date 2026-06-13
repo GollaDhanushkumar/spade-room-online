@@ -6,30 +6,51 @@ import { TEAM_COLORS } from '@/lib/game-logic';
 import Avatar from './Avatar';
 
 // ──────────────────────────────────────────────────────────
-// Top-level: list of ALL past matches across all rooms
-// (host-only — gated by the parent that renders this modal)
+// Top-level: tabs for Matches list + Rankings page
 // ──────────────────────────────────────────────────────────
-export default function MatchHistoryModal({ code, onClose }) {
+export default function MatchHistoryModal({ code, onClose, iAmHost }) {
   const [matches, setMatches] = useState([]);
+  const [hiddenRows, setHiddenRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedMatch, setSelectedMatch] = useState(null);
+  const [activeTab, setActiveTab] = useState('matches');
 
   useEffect(() => {
     let cancelled = false;
+
     async function load() {
-      const { data, error } = await supabase
-        .from('matches')
-        .select('*')
-        .order('completed_at', { ascending: false })
-        .limit(200);
-      if (error) console.error('Failed to load match history:', error);
+      const [{ data: matchData }, { data: hiddenData }] = await Promise.all([
+        supabase
+          .from('matches')
+          .select('*')
+          .order('completed_at', { ascending: false })
+          .limit(500),
+        supabase
+          .from('hidden_rankings')
+          .select('*'),
+      ]);
       if (!cancelled) {
-        setMatches(data || []);
+        setMatches(matchData || []);
+        setHiddenRows(hiddenData || []);
         setLoading(false);
       }
     }
     load();
-    return () => { cancelled = true; };
+
+    const channel = supabase
+      .channel('hidden-rankings')
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'hidden_rankings' },
+        async () => {
+          const { data } = await supabase.from('hidden_rankings').select('*');
+          if (!cancelled) setHiddenRows(data || []);
+        })
+      .subscribe();
+
+    return () => {
+      cancelled = true;
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   if (selectedMatch) {
@@ -45,9 +66,11 @@ export default function MatchHistoryModal({ code, onClose }) {
         className="bg-[#0f1d18] border border-emerald-900 rounded-2xl w-full max-w-md max-h-[90vh] overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-5 py-4 border-b border-emerald-900/50">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-emerald-900/50">
           <div>
-            <h2 className="text-xl font-serif italic text-amber-200">Match History</h2>
+            <h2 className="text-xl font-serif italic text-amber-200">
+              {activeTab === 'matches' ? 'Match History' : 'Rankings'}
+            </h2>
             <p className="text-[10px] text-emerald-200/40 uppercase tracking-wider mt-0.5">
               All-time · {matches.length} matches
             </p>
@@ -61,6 +84,29 @@ export default function MatchHistoryModal({ code, onClose }) {
           </button>
         </div>
 
+        <div className="flex border-b border-emerald-900/40">
+          <button
+            onClick={() => setActiveTab('matches')}
+            className={`flex-1 py-3 text-xs uppercase tracking-widest transition ${
+              activeTab === 'matches'
+                ? 'text-amber-200 border-b-2 border-amber-300'
+                : 'text-emerald-200/50 hover:text-emerald-200/80'
+            }`}
+          >
+            📜 Matches
+          </button>
+          <button
+            onClick={() => setActiveTab('rankings')}
+            className={`flex-1 py-3 text-xs uppercase tracking-widest transition ${
+              activeTab === 'rankings'
+                ? 'text-amber-200 border-b-2 border-amber-300'
+                : 'text-emerald-200/50 hover:text-emerald-200/80'
+            }`}
+          >
+            🏆 Rankings
+          </button>
+        </div>
+
         <div className="overflow-y-auto flex-1 p-4">
           {loading ? (
             <p className="text-emerald-200/40 text-center text-sm py-8">Loading...</p>
@@ -70,12 +116,14 @@ export default function MatchHistoryModal({ code, onClose }) {
               <p className="text-emerald-200/60 text-sm">No matches yet</p>
               <p className="text-emerald-200/40 text-xs mt-2">Play one to see it here.</p>
             </div>
-          ) : (
+          ) : activeTab === 'matches' ? (
             <div className="space-y-2">
               {matches.map((m) => (
                 <MatchRow key={m.id} match={m} currentRoom={code} onClick={() => setSelectedMatch(m)} />
               ))}
             </div>
+          ) : (
+            <RankingsView matches={matches} hiddenRows={hiddenRows} iAmHost={iAmHost} />
           )}
         </div>
       </div>
@@ -137,6 +185,582 @@ function MatchRow({ match, currentRoom, onClick }) {
   );
 }
 
+// ──────────────────────────────────────────────────────────
+// Rankings view with sub-tabs (Individual / Pairs)
+// ──────────────────────────────────────────────────────────
+function RankingsView({ matches, hiddenRows, iAmHost }) {
+  const [subTab, setSubTab] = useState('individual'); // 'individual' | 'pairs'
+  const [editMode, setEditMode] = useState(false);
+  const [showHiddenList, setShowHiddenList] = useState(false);
+  const [confirmHide, setConfirmHide] = useState(null);
+  const [working, setWorking] = useState(false);
+
+  const hiddenSet = new Set(hiddenRows.map((h) => h.identifier));
+
+  async function handleHide(identifier, displayName) {
+    if (working) return;
+    setWorking(true);
+    const { error } = await supabase.from('hidden_rankings').insert({
+      identifier,
+      display_name: displayName,
+    });
+    if (error) console.error('Failed to hide:', error);
+    setConfirmHide(null);
+    setWorking(false);
+  }
+
+  async function handleUnhide(identifier) {
+    if (working) return;
+    setWorking(true);
+    const { error } = await supabase.from('hidden_rankings').delete().eq('identifier', identifier);
+    if (error) console.error('Failed to unhide:', error);
+    setWorking(false);
+  }
+
+  return (
+    <div className="space-y-2">
+      {/* Sub-tabs */}
+      <div className="flex bg-[#14271f] rounded-lg p-1 mb-2">
+        <button
+          onClick={() => setSubTab('individual')}
+          className={`flex-1 py-2 text-[11px] uppercase tracking-wider rounded-md transition ${
+            subTab === 'individual'
+              ? 'bg-amber-300 text-[#07100c] font-bold'
+              : 'text-emerald-200/60 hover:text-emerald-200'
+          }`}
+        >
+          Individual
+        </button>
+        <button
+          onClick={() => setSubTab('pairs')}
+          className={`flex-1 py-2 text-[11px] uppercase tracking-wider rounded-md transition ${
+            subTab === 'pairs'
+              ? 'bg-amber-300 text-[#07100c] font-bold'
+              : 'text-emerald-200/60 hover:text-emerald-200'
+          }`}
+        >
+          Team Pairs
+        </button>
+      </div>
+
+      {subTab === 'individual' ? (
+        <IndividualRankings
+          matches={matches}
+          hiddenSet={hiddenSet}
+          iAmHost={iAmHost}
+          editMode={editMode}
+          setEditMode={setEditMode}
+          onHideClick={(p) => setConfirmHide({ identifier: p.identifier, displayName: p.displayName })}
+        />
+      ) : (
+        <PairRankings
+          matches={matches}
+          hiddenSet={hiddenSet}
+        />
+      )}
+
+      {/* Hidden players section (host-only, applies to both tabs) */}
+      {iAmHost && hiddenRows.length > 0 && (
+        <div className="mt-4 pt-3 border-t border-emerald-900/40">
+          <button
+            onClick={() => setShowHiddenList((v) => !v)}
+            className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-[#14271f] border border-emerald-900/40 hover:border-amber-300/40 transition text-xs"
+          >
+            <span className="text-emerald-200/70">
+              🚫 {hiddenRows.length} hidden {hiddenRows.length === 1 ? 'player' : 'players'}
+            </span>
+            <span className="text-emerald-200/40">{showHiddenList ? '▲' : '▼'}</span>
+          </button>
+          {showHiddenList && (
+            <div className="mt-2 space-y-1.5">
+              {hiddenRows.map((h) => (
+                <div
+                  key={h.identifier}
+                  className="flex items-center justify-between px-3 py-2 rounded-lg bg-[#14271f]/60 border border-emerald-900/30"
+                >
+                  <span className="text-xs text-emerald-200/60 truncate">{h.display_name || h.identifier}</span>
+                  <button
+                    onClick={() => handleUnhide(h.identifier)}
+                    disabled={working}
+                    className="text-[10px] uppercase tracking-wider px-2 py-1 rounded border border-emerald-900 text-emerald-200/70 hover:text-emerald-200 hover:bg-emerald-950/40 disabled:opacity-50"
+                  >
+                    Unhide
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          <p className="text-[10px] text-emerald-200/30 text-center mt-2">
+            Hiding a player also hides every pair containing them.
+          </p>
+        </div>
+      )}
+
+      {/* Hide confirmation modal */}
+      {confirmHide && (
+        <div
+          className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4"
+          onClick={() => setConfirmHide(null)}
+        >
+          <div
+            className="bg-[#0f1d18] border border-amber-300/40 rounded-2xl p-5 max-w-xs w-full"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-serif italic text-amber-200 mb-2">Hide from rankings?</h3>
+            <p className="text-emerald-200/70 text-sm mb-4">
+              <span className="font-bold">{confirmHide.displayName}</span> will no longer appear in rankings for anyone. Any team pairs with them will also be hidden. You can unhide them later from the bottom of this page.
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setConfirmHide(null)}
+                disabled={working}
+                className="flex-1 py-2.5 rounded-lg border border-emerald-900 text-emerald-200/70 text-sm hover:bg-emerald-950/40"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleHide(confirmHide.identifier, confirmHide.displayName)}
+                disabled={working}
+                className="flex-1 py-2.5 rounded-lg bg-red-900/40 border border-red-400/50 text-red-200 text-sm disabled:opacity-50"
+              >
+                {working ? 'Hiding...' : 'Hide'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────
+// Individual rankings (individual mode matches only)
+// ──────────────────────────────────────────────────────────
+function IndividualRankings({ matches, hiddenSet, iAmHost, editMode, setEditMode, onHideClick }) {
+  const indivMatches = matches.filter((m) => m.mode === 'individual');
+  const stats = computePlayerStats(indivMatches);
+  const visible = Object.values(stats).filter((p) => !hiddenSet.has(p.identifier));
+  const ranked = visible.sort((a, b) => {
+    if (b.winRate !== a.winRate) return b.winRate - a.winRate;
+    return b.totalPoints - a.totalPoints;
+  });
+
+  return (
+    <>
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-[10px] uppercase tracking-widest text-emerald-200/40">
+          {indivMatches.length} individual {indivMatches.length === 1 ? 'match' : 'matches'} · sorted by win rate
+        </p>
+        {iAmHost && ranked.length > 0 && (
+          <button
+            onClick={() => setEditMode((v) => !v)}
+            className={`text-[10px] uppercase tracking-wider px-2 py-1 rounded transition ${
+              editMode
+                ? 'bg-amber-300 text-[#07100c] font-bold'
+                : 'border border-emerald-900 text-emerald-200/70 hover:bg-emerald-950/40'
+            }`}
+          >
+            {editMode ? '✓ Done' : '✎ Manage'}
+          </button>
+        )}
+      </div>
+
+      {ranked.length === 0 ? (
+        <div className="text-center py-10">
+          <p className="text-3xl mb-2">🏆</p>
+          <p className="text-emerald-200/60 text-sm">No individual matches yet</p>
+        </div>
+      ) : (
+        ranked.map((p, idx) => (
+          <PlayerRankingRow
+            key={p.identifier}
+            player={p}
+            rank={idx + 1}
+            editMode={editMode}
+            onHideClick={() => onHideClick(p)}
+          />
+        ))
+      )}
+
+      <p className="text-[10px] text-emerald-200/30 text-center mt-4 leading-relaxed">
+        Stats match by name first (case-insensitive), then avatar.
+      </p>
+    </>
+  );
+}
+
+function PlayerRankingRow({ player, rank, editMode, onHideClick }) {
+  const [expanded, setExpanded] = useState(false);
+  const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : `#${rank}`;
+  const winRatePct = Math.round(player.winRate * 100);
+  const avgScore = player.matchesPlayed > 0 ? Math.round(player.totalPoints / player.matchesPlayed) : 0;
+  const bidAccuracyPct = player.totalBids > 0 ? Math.round((player.correctBids / player.totalBids) * 100) : 0;
+
+  const streakLabel = player.currentStreak === 0
+    ? 'No streak'
+    : player.streakType === 'win'
+      ? `🔥 ${player.currentStreak}W streak`
+      : `❄️ ${player.currentStreak}L streak`;
+  const streakColor = player.currentStreak === 0
+    ? '#86a294'
+    : player.streakType === 'win'
+      ? '#86efac'
+      : '#fca5a5';
+
+  return (
+    <div className="bg-[#14271f] border border-emerald-900/50 rounded-xl p-3 transition mb-2">
+      <div className="flex items-center gap-3">
+        <span className="text-lg font-serif italic text-amber-200 w-10 text-center flex-shrink-0">{medal}</span>
+        <Avatar avatarId={player.avatarId} playerName={player.displayName} size="sm" />
+        <button
+          onClick={() => setExpanded((v) => !v)}
+          className="flex-1 min-w-0 text-left"
+        >
+          <p className="text-sm font-medium truncate">{player.displayName}</p>
+          <p className="text-[10px] text-emerald-200/50">
+            {player.wins}W · {player.losses}L · {player.matchesPlayed} matches
+          </p>
+        </button>
+        <div className="text-right flex-shrink-0">
+          <p className="text-lg font-serif italic font-bold text-amber-200">{winRatePct}%</p>
+          <p className="text-[9px] text-emerald-200/40 uppercase tracking-wider">win rate</p>
+        </div>
+        {editMode && (
+          <button
+            onClick={onHideClick}
+            className="ml-1 w-7 h-7 rounded-full bg-red-900/40 border border-red-400/50 text-red-200 text-base hover:bg-red-900/60 flex items-center justify-center flex-shrink-0"
+            title="Hide from rankings"
+            aria-label="Hide from rankings"
+          >
+            ×
+          </button>
+        )}
+      </div>
+
+      {expanded && !editMode && (
+        <div className="mt-3 pt-3 border-t border-emerald-900/40 grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+          <StatLine label="Total points" value={`${player.totalPoints > 0 ? '+' : ''}${player.totalPoints}`} color={player.totalPoints > 0 ? '#86efac' : '#fca5a5'} />
+          <StatLine label="Avg / match" value={`${avgScore > 0 ? '+' : ''}${avgScore}`} color={avgScore > 0 ? '#86efac' : '#fca5a5'} />
+          <StatLine label="Best match" value={`${player.bestMatch > 0 ? '+' : ''}${player.bestMatch}`} color="#86efac" />
+          <StatLine label="Worst match" value={`${player.worstMatch > 0 ? '+' : ''}${player.worstMatch}`} color="#fca5a5" />
+          <StatLine label="Bid accuracy" value={`${bidAccuracyPct}% (${player.correctBids}/${player.totalBids})`} color="#e5d4a8" />
+          <StatLine label="Current streak" value={streakLabel} color={streakColor} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────
+// Pair rankings — unique team pairings sorted by their win rate
+// ──────────────────────────────────────────────────────────
+function PairRankings({ matches, hiddenSet }) {
+  const teamMatches = matches.filter((m) => m.mode === 'team');
+  const pairs = computePairStats(teamMatches);
+
+  // Filter out pairs where either member is hidden
+  const visible = Object.values(pairs).filter((p) =>
+    !hiddenSet.has(p.aIdentifier) && !hiddenSet.has(p.bIdentifier)
+  );
+
+  // Only show pairs with at least 1 match together. Sort by win rate desc, then matches desc.
+  const ranked = visible
+    .filter((p) => p.matchesPlayed >= 1)
+    .sort((a, b) => {
+      if (b.winRate !== a.winRate) return b.winRate - a.winRate;
+      return b.matchesPlayed - a.matchesPlayed;
+    });
+
+  return (
+    <>
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-[10px] uppercase tracking-widest text-emerald-200/40">
+          {teamMatches.length} team {teamMatches.length === 1 ? 'match' : 'matches'} · {ranked.length} unique {ranked.length === 1 ? 'pair' : 'pairs'}
+        </p>
+      </div>
+
+      {ranked.length === 0 ? (
+        <div className="text-center py-10">
+          <p className="text-3xl mb-2">👥</p>
+          <p className="text-emerald-200/60 text-sm">No team pairs yet</p>
+          <p className="text-emerald-200/40 text-xs mt-1">Play team matches to see partnerships.</p>
+        </div>
+      ) : (
+        ranked.map((p, idx) => (
+          <PairRankingRow key={`${p.aIdentifier}__${p.bIdentifier}`} pair={p} rank={idx + 1} />
+        ))
+      )}
+
+      <p className="text-[10px] text-emerald-200/30 text-center mt-4 leading-relaxed">
+        Each pair = a unique 2-player team. Pairs with 1 match shown; rankings stabilize as you play more.
+      </p>
+    </>
+  );
+}
+
+function PairRankingRow({ pair, rank }) {
+  const [expanded, setExpanded] = useState(false);
+  const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : `#${rank}`;
+  const winRatePct = Math.round(pair.winRate * 100);
+  const avgScore = pair.matchesPlayed > 0 ? Math.round(pair.totalPoints / pair.matchesPlayed) : 0;
+  const bidAccuracyPct = pair.totalBids > 0 ? Math.round((pair.correctBids / pair.totalBids) * 100) : 0;
+
+  const streakLabel = pair.currentStreak === 0
+    ? 'No streak'
+    : pair.streakType === 'win'
+      ? `🔥 ${pair.currentStreak}W streak`
+      : `❄️ ${pair.currentStreak}L streak`;
+  const streakColor = pair.currentStreak === 0
+    ? '#86a294'
+    : pair.streakType === 'win'
+      ? '#86efac'
+      : '#fca5a5';
+
+  return (
+    <div className="bg-[#14271f] border border-emerald-900/50 rounded-xl p-3 transition mb-2">
+      <div className="flex items-center gap-3">
+        <span className="text-lg font-serif italic text-amber-200 w-10 text-center flex-shrink-0">{medal}</span>
+        <div className="flex items-center -space-x-2 flex-shrink-0">
+          <Avatar avatarId={pair.aAvatarId} playerName={pair.aName} size="sm" />
+          <Avatar avatarId={pair.bAvatarId} playerName={pair.bName} size="sm" />
+        </div>
+        <button
+          onClick={() => setExpanded((v) => !v)}
+          className="flex-1 min-w-0 text-left"
+        >
+          <p className="text-sm font-medium truncate">{pair.aName} + {pair.bName}</p>
+          <p className="text-[10px] text-emerald-200/50">
+            {pair.wins}W · {pair.losses}L · {pair.matchesPlayed} matches
+          </p>
+        </button>
+        <div className="text-right flex-shrink-0">
+          <p className="text-lg font-serif italic font-bold text-amber-200">{winRatePct}%</p>
+          <p className="text-[9px] text-emerald-200/40 uppercase tracking-wider">win rate</p>
+        </div>
+      </div>
+
+      {expanded && (
+        <div className="mt-3 pt-3 border-t border-emerald-900/40 grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+          <StatLine label="Total points" value={`${pair.totalPoints > 0 ? '+' : ''}${pair.totalPoints}`} color={pair.totalPoints > 0 ? '#86efac' : '#fca5a5'} />
+          <StatLine label="Avg / match" value={`${avgScore > 0 ? '+' : ''}${avgScore}`} color={avgScore > 0 ? '#86efac' : '#fca5a5'} />
+          <StatLine label="Best match" value={`${pair.bestMatch > 0 ? '+' : ''}${pair.bestMatch}`} color="#86efac" />
+          <StatLine label="Worst match" value={`${pair.worstMatch > 0 ? '+' : ''}${pair.worstMatch}`} color="#fca5a5" />
+          <StatLine label="Bid accuracy" value={`${bidAccuracyPct}% (${pair.correctBids}/${pair.totalBids})`} color="#e5d4a8" />
+          <StatLine label="Current streak" value={streakLabel} color={streakColor} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StatLine({ label, value, color }) {
+  return (
+    <div>
+      <p className="text-[9px] uppercase tracking-wider text-emerald-200/40">{label}</p>
+      <p className="text-xs font-mono font-bold" style={{ color }}>{value}</p>
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────
+// Smart identifier matching (lowercase name first, then avatar)
+// ──────────────────────────────────────────────────────────
+function makeIdentifierResolver() {
+  const seenAvatars = {}; // avatar_id -> identifier
+  const seenIdentifiers = new Set();
+
+  return function getIdentifier(name, avatarId) {
+    const lowerName = (name || 'unknown').toLowerCase().trim();
+    if (seenIdentifiers.has(lowerName)) return lowerName;
+    if (avatarId && seenAvatars[avatarId]) return seenAvatars[avatarId];
+    seenIdentifiers.add(lowerName);
+    if (avatarId) seenAvatars[avatarId] = lowerName;
+    return lowerName;
+  };
+}
+
+// ──────────────────────────────────────────────────────────
+// Compute individual stats (individual matches only)
+// ──────────────────────────────────────────────────────────
+function computePlayerStats(matches) {
+  const statsByIdentifier = {};
+  const getIdentifier = makeIdentifierResolver();
+
+  for (const match of matches) {
+    const finalScores = match.final_scores || {};
+    const playerSnap = match.player_snapshot || [];
+    const roundBreakdown = match.round_breakdown || [];
+
+    const sortedScores = Object.entries(finalScores).sort((a, b) => b[1] - a[1]);
+    const winnerId = sortedScores[0]?.[0];
+
+    for (const p of playerSnap) {
+      const identifier = getIdentifier(p.name, p.avatar_id);
+
+      if (!statsByIdentifier[identifier]) {
+        statsByIdentifier[identifier] = {
+          identifier,
+          displayName: p.name,
+          avatarId: p.avatar_id,
+          matchesPlayed: 0, wins: 0, losses: 0, winRate: 0,
+          totalPoints: 0, bestMatch: -Infinity, worstMatch: Infinity,
+          totalBids: 0, correctBids: 0,
+          recentResults: [],
+          currentStreak: 0, streakType: null,
+        };
+      }
+      const s = statsByIdentifier[identifier];
+      s.matchesPlayed += 1;
+
+      const myScore = finalScores[p.player_id] ?? 0;
+      const iWon = p.player_id === winnerId;
+
+      s.totalPoints += myScore;
+      if (myScore > s.bestMatch) s.bestMatch = myScore;
+      if (myScore < s.worstMatch) s.worstMatch = myScore;
+      if (iWon) s.wins += 1; else s.losses += 1;
+      s.recentResults.push(iWon ? 'W' : 'L');
+
+      for (const r of roundBreakdown) {
+        if (!r.completed) continue;
+        const bid = r.bids?.[p.player_id];
+        const won = r.tricks_won?.[p.player_id];
+        if (bid != null && won != null) {
+          s.totalBids += 1;
+          if (bid === won) s.correctBids += 1;
+        }
+      }
+    }
+  }
+
+  for (const s of Object.values(statsByIdentifier)) {
+    s.winRate = s.matchesPlayed > 0 ? s.wins / s.matchesPlayed : 0;
+    if (s.bestMatch === -Infinity) s.bestMatch = 0;
+    if (s.worstMatch === Infinity) s.worstMatch = 0;
+    if (s.recentResults.length > 0) {
+      const latest = s.recentResults[0];
+      s.streakType = latest === 'W' ? 'win' : 'loss';
+      let streak = 0;
+      for (const r of s.recentResults) {
+        if (r === latest) streak += 1;
+        else break;
+      }
+      s.currentStreak = streak;
+    }
+  }
+
+  return statsByIdentifier;
+}
+
+// ──────────────────────────────────────────────────────────
+// Compute pair stats (team matches only)
+// Each unique 2-player team becomes one ranking entry.
+// Larger teams (e.g. 3-player teams in 6-player team mode) generate
+// all 2-player sub-pairings.
+// ──────────────────────────────────────────────────────────
+function computePairStats(matches) {
+  const pairsByKey = {};
+  const getIdentifier = makeIdentifierResolver();
+
+  function pairKey(idA, idB) {
+    return idA < idB ? `${idA}__${idB}` : `${idB}__${idA}`;
+  }
+
+  for (const match of matches) {
+    const finalScores = match.final_scores || {};
+    const teamSnap = match.team_snapshot || [];
+    const roundBreakdown = match.round_breakdown || [];
+
+    const sortedScores = Object.entries(finalScores).sort((a, b) => b[1] - a[1]);
+    const winnerTeamId = sortedScores[0]?.[0];
+
+    for (const team of teamSnap) {
+      const members = team.members || [];
+      if (members.length < 2) continue;
+
+      // Resolve identifiers for each member
+      const resolved = members.map((m) => ({
+        member: m,
+        identifier: getIdentifier(m.name, m.avatar_id),
+      }));
+
+      const teamScore = finalScores[team.team_id] ?? 0;
+      const teamWon = team.team_id === winnerTeamId;
+
+      // Generate all unique 2-player sub-pairs from this team
+      for (let i = 0; i < resolved.length; i++) {
+        for (let j = i + 1; j < resolved.length; j++) {
+          const a = resolved[i];
+          const b = resolved[j];
+          const key = pairKey(a.identifier, b.identifier);
+
+          if (!pairsByKey[key]) {
+            // Stable ordering: sort by identifier alphabetically
+            const [first, second] = a.identifier < b.identifier ? [a, b] : [b, a];
+            pairsByKey[key] = {
+              aIdentifier: first.identifier,
+              bIdentifier: second.identifier,
+              aName: first.member.name,
+              bName: second.member.name,
+              aAvatarId: first.member.avatar_id,
+              bAvatarId: second.member.avatar_id,
+              matchesPlayed: 0, wins: 0, losses: 0, winRate: 0,
+              totalPoints: 0, bestMatch: -Infinity, worstMatch: Infinity,
+              totalBids: 0, correctBids: 0,
+              recentResults: [],
+              currentStreak: 0, streakType: null,
+            };
+          }
+
+          const pair = pairsByKey[key];
+          pair.matchesPlayed += 1;
+          pair.totalPoints += teamScore;
+          if (teamScore > pair.bestMatch) pair.bestMatch = teamScore;
+          if (teamScore < pair.worstMatch) pair.worstMatch = teamScore;
+          if (teamWon) pair.wins += 1; else pair.losses += 1;
+          pair.recentResults.push(teamWon ? 'W' : 'L');
+
+          // Bid accuracy across rounds
+          for (const r of roundBreakdown) {
+            if (!r.completed) continue;
+            const bid = r.bids?.[team.team_id];
+            const won = r.tricks_won?.[team.team_id];
+            if (bid != null && won != null) {
+              pair.totalBids += 1;
+              if (bid === won) pair.correctBids += 1;
+            }
+          }
+
+          // Keep the most recent name/avatar (since matches are sorted DESC,
+          // the FIRST iteration is newest — so we only set on first insert)
+          // Already handled above.
+        }
+      }
+    }
+  }
+
+  for (const p of Object.values(pairsByKey)) {
+    p.winRate = p.matchesPlayed > 0 ? p.wins / p.matchesPlayed : 0;
+    if (p.bestMatch === -Infinity) p.bestMatch = 0;
+    if (p.worstMatch === Infinity) p.worstMatch = 0;
+    if (p.recentResults.length > 0) {
+      const latest = p.recentResults[0];
+      p.streakType = latest === 'W' ? 'win' : 'loss';
+      let streak = 0;
+      for (const r of p.recentResults) {
+        if (r === latest) streak += 1;
+        else break;
+      }
+      p.currentStreak = streak;
+    }
+  }
+
+  return pairsByKey;
+}
+
+// ──────────────────────────────────────────────────────────
+// Match detail view (unchanged)
+// ──────────────────────────────────────────────────────────
 function MatchDetail({ match, onBack, onClose }) {
   const isTeam = match.mode === 'team';
   const ranked = buildRanking(match);
@@ -156,12 +780,7 @@ function MatchDetail({ match, onBack, onClose }) {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-emerald-900/50">
-          <button
-            onClick={onBack}
-            className="text-emerald-200/60 hover:text-emerald-100 transition text-sm"
-          >
-            ← Back
-          </button>
+          <button onClick={onBack} className="text-emerald-200/60 hover:text-emerald-100 transition text-sm">← Back</button>
           <h2 className="text-base font-serif italic text-amber-200">Match Detail</h2>
           <button
             onClick={onClose}
@@ -171,17 +790,13 @@ function MatchDetail({ match, onBack, onClose }) {
             ×
           </button>
         </div>
-
         <div className="overflow-y-auto flex-1 p-4">
           <div className="text-center mb-4">
             <p className="text-xs text-emerald-200/40 uppercase tracking-widest">
               Room {match.room_code}
-              {' · '}
-              {date.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}
-              {' · '}
-              {date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
-              {' · '}
-              {minutesPlayed}m
+              {' · '}{date.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}
+              {' · '}{date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
+              {' · '}{minutesPlayed}m
             </p>
             <p className="text-[10px] text-emerald-200/40 uppercase tracking-wider mt-1">
               {isTeam ? 'Team' : 'Individual'} · {match.deck_count} deck · {match.player_count} players · {match.max_rounds} rounds
@@ -201,17 +816,12 @@ function MatchDetail({ match, onBack, onClose }) {
                   }}
                 >
                   <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-base font-serif italic w-6 text-center"
-                      style={{ color: idx === 0 ? r.color : '#86a294' }}>
+                    <span className="text-base font-serif italic w-6 text-center" style={{ color: idx === 0 ? r.color : '#86a294' }}>
                       {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `${idx + 1}`}
                     </span>
-                    {isTeam && (
-                      <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: r.color }} />
-                    )}
+                    {isTeam && <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: r.color }} />}
                     <div className="flex items-center gap-1 flex-shrink-0">
-                      {(r.avatars || []).map((a, i) => (
-                        <Avatar key={i} avatarId={a.id} playerName={a.name} size="xs" />
-                      ))}
+                      {(r.avatars || []).map((a, i) => (<Avatar key={i} avatarId={a.id} playerName={a.name} size="xs" />))}
                     </div>
                     <span className="text-sm truncate font-medium">{r.label}</span>
                   </div>
@@ -226,16 +836,12 @@ function MatchDetail({ match, onBack, onClose }) {
 
           {completedRounds.length > 0 && (
             <div className="bg-emerald-950/30 border border-emerald-900/60 rounded-2xl p-4 overflow-x-auto">
-              <p className="text-xs uppercase tracking-widest text-emerald-200/60 text-center mb-3">
-                Round-by-round
-              </p>
+              <p className="text-xs uppercase tracking-widest text-emerald-200/60 text-center mb-3">Round-by-round</p>
               <table className="w-full text-xs" style={{ borderCollapse: 'collapse' }}>
                 <thead>
                   <tr className="text-emerald-200/40 uppercase tracking-wider">
                     <th className="text-left pb-2 pr-2">{isTeam ? 'Team' : 'Player'}</th>
-                    {completedRounds.map((r) => (
-                      <th key={r.round_num} className="px-1.5 pb-2 text-center">R{r.round_num}</th>
-                    ))}
+                    {completedRounds.map((r) => (<th key={r.round_num} className="px-1.5 pb-2 text-center">R{r.round_num}</th>))}
                     <th className="pl-2 pb-2 text-right">Σ</th>
                   </tr>
                 </thead>
@@ -244,9 +850,7 @@ function MatchDetail({ match, onBack, onClose }) {
                     <tr key={rk.id} className="border-t border-emerald-900/30">
                       <td className="py-2 pr-2 truncate" style={{ maxWidth: 110 }}>
                         <div className="flex items-center gap-1.5">
-                          {isTeam && (
-                            <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: rk.color }} />
-                          )}
+                          {isTeam && <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: rk.color }} />}
                           <span className="truncate">{rk.label}</span>
                         </div>
                       </td>
@@ -257,9 +861,7 @@ function MatchDetail({ match, onBack, onClose }) {
                         return (
                           <td key={r.round_num} className="px-1.5 py-2 text-center font-mono">
                             <div className="text-[10px] text-emerald-200/40">{won}/{bid ?? 0}</div>
-                            <span style={{
-                              color: s > 0 ? '#86efac' : s < 0 ? '#fca5a5' : '#86a294',
-                            }}>
+                            <span style={{ color: s > 0 ? '#86efac' : s < 0 ? '#fca5a5' : '#86a294' }}>
                               {s > 0 ? '+' : ''}{s}
                             </span>
                           </td>
