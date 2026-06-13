@@ -623,12 +623,13 @@ function computePlayerStats(matches) {
 
       for (const r of roundBreakdown) {
         if (!r.completed) continue;
-        const bid = r.bids?.[p.player_id];
-        const won = r.tricks_won?.[p.player_id];
-        if (bid != null && won != null) {
-          s.totalBids += 1;
-          if (bid === won) s.correctBids += 1;
-        }
+        const rawBid = r.bids?.[p.player_id];
+        const rawWon = r.tricks_won?.[p.player_id];
+        // Treat missing values as 0 — a completed round counts whether they bid or not
+        const bid = rawBid ?? 0;
+        const won = rawWon ?? 0;
+        s.totalBids += 1;
+        if (bid === won) s.correctBids += 1;
       }
     }
   }
@@ -720,15 +721,15 @@ function computePairStats(matches) {
           if (teamWon) pair.wins += 1; else pair.losses += 1;
           pair.recentResults.push(teamWon ? 'W' : 'L');
 
-          // Bid accuracy across rounds
+          // Bid accuracy across rounds — treat missing as 0
           for (const r of roundBreakdown) {
             if (!r.completed) continue;
-            const bid = r.bids?.[team.team_id];
-            const won = r.tricks_won?.[team.team_id];
-            if (bid != null && won != null) {
-              pair.totalBids += 1;
-              if (bid === won) pair.correctBids += 1;
-            }
+            const rawBid = r.bids?.[team.team_id];
+            const rawWon = r.tricks_won?.[team.team_id];
+            const bid = rawBid ?? 0;
+            const won = rawWon ?? 0;
+            pair.totalBids += 1;
+            if (bid === won) pair.correctBids += 1;
           }
 
           // Keep the most recent name/avatar (since matches are sorted DESC,
