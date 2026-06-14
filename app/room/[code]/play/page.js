@@ -1952,10 +1952,13 @@ function PlayTable({ seats, allHands, mySeat, currentTrick, currentPlayerSeatIdx
       />
 
       {currentTrick.map((entry, i) => {
-        // Evenly space cards in a circle. First card at top, going clockwise.
-        const angle = (i / Math.max(1, totalTricks)) * 2 * Math.PI - Math.PI / 2;
-        const left = 50 + ringRadius * Math.cos(angle);
-        const top = 50 + ringRadius * Math.sin(angle);
+        // Place card between the player's seat and the center of the table,
+        // so it appears in front of the player who actually played it.
+        const playerRelIdx = (entry.seat_index - mySeatIdx + N) % N;
+        const seatPos = positions[playerRelIdx] ?? { l: 50, t: 50 };
+        const towardCenter = 0.65; // 0 = at seat, 1 = at center
+        const left = seatPos.l + (50 - seatPos.l) * towardCenter;
+        const top = seatPos.t + (50 - seatPos.t) * towardCenter;
         const isWinner = revealedWinner && revealedWinner.player_id === entry.player_id;
         return (
           <div key={`played-${i}`}
@@ -2294,11 +2297,12 @@ const isMobile = useIsMobile();
         }}
       />
 
-      {/* Cards played in current trick — evenly spaced in a circle */}
+     {/* Cards played in current trick — placed in front of the player who played them */}
       {currentTrick.map((entry, i) => {
-        const angle = (i / Math.max(1, totalTricks)) * 2 * Math.PI - Math.PI / 2;
-        const left = 50 + ringRadius * Math.cos(angle);
-        const top = 50 + ringRadius * Math.sin(angle);
+        const seatPos = positions[entry.seat_index] ?? { l: 50, t: 50 };
+        const towardCenter = 0.65; // 0 = at seat, 1 = at center
+        const left = seatPos.l + (50 - seatPos.l) * towardCenter;
+        const top = seatPos.t + (50 - seatPos.t) * towardCenter;
         const isWinner = revealedWinner && revealedWinner.player_id === entry.player_id;
         return (
           <div key={`played-${i}`}
