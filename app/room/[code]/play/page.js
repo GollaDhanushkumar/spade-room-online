@@ -667,17 +667,17 @@ async function handleLockIndivBid() {
         }
       }
 
-      console.log('🎯 Easter egg check:', {
-        dhanushWon,
-        isTeamMode,
-        seats: seats.map(s => ({ name: s.name, avatar_id: s.avatar_id, player_id: s.player_id, seat_index: s.seat_index, team_id: s.team_id })),
-        allRoundsCount: allRounds.length,
-        sampleRoundScores: allRounds[allRounds.length - 1]?.scores,
-        sampleRoundTeamScores: allRounds[allRounds.length - 1]?.team_scores,
-      });
+      // console.log('🎯 Easter egg check:', {
+      //   dhanushWon,
+      //   isTeamMode,
+      //   seats: seats.map(s => ({ name: s.name, avatar_id: s.avatar_id, player_id: s.player_id, seat_index: s.seat_index, team_id: s.team_id })),
+      //   allRoundsCount: allRounds.length,
+      //   sampleRoundScores: allRounds[allRounds.length - 1]?.scores,
+      //   sampleRoundTeamScores: allRounds[allRounds.length - 1]?.team_scores,
+      // });
 
       if (dhanushWon) {
-        setTimeout(() => setShowVictoryEgg(true), 3000);
+        setTimeout(() => setShowVictoryEgg(true), 5000);
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2202,7 +2202,7 @@ function BidSumToast({ allBidsLocked, totalBids, tricksAvailable, roundKey }) {
       return;
     }
     setVisible(true);
-    const t = setTimeout(() => setVisible(false), 3000);
+    const t = setTimeout(() => setVisible(false), 5000);
     return () => clearTimeout(t);
   }, [allBidsLocked, roundKey]);
 
