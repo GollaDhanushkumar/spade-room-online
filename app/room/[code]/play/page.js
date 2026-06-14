@@ -1936,7 +1936,7 @@ function PlayTable({ seats, allHands, mySeat, currentTrick, currentPlayerSeatIdx
   const ringRadius = isMobile
     ? (N <= 4 ? 12 : N <= 6 ? 14 : 16)
     : (N <= 4 ? 14 : N <= 6 ? 17 : 19);
-  const cardSize = isMobile ? 'xs' : (N <= 4 ? 'md' : 'sm');
+  const cardSize = isMobile ? 'sm' : (N <= 4 ? 'md' : 'sm');
 
   return (
     <div className="relative w-full flex-1" style={{ minHeight: 380 }}>
@@ -2278,7 +2278,7 @@ const isMobile = useIsMobile();
   const ringRadius = isMobile
     ? (N <= 4 ? 12 : N <= 6 ? 14 : 16)
     : (N <= 4 ? 14 : N <= 6 ? 17 : 19);
-  const cardSize = isMobile ? 'xs' : (N <= 4 ? 'md' : 'sm');
+  const cardSize = isMobile ? 'sm' : (N <= 4 ? 'md' : 'sm');
 
   return (
     <div className="relative w-full flex-1" style={{ minHeight: 460 }}>
