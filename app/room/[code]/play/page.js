@@ -635,7 +635,7 @@ async function handleLockIndivBid() {
       // ── EASTER EGG: Dhanush victory popup (shows for EVERYONE) ──
       const isDhanushIdentifier = (name, avatarId) => {
         const lower = (name || '').toLowerCase().trim();
-        return lower === 'dhanush' || avatarId === 'dhanush';
+        return lower === 'dhanush' || avatarId === 'friend:dhanush';
       };
 
       let dhanushWon = false;
@@ -666,6 +666,15 @@ async function handleLockIndivBid() {
           dhanushWon = isDhanushIdentifier(winnerSeat.name, winnerSeat.avatar_id);
         }
       }
+
+      console.log('🎯 Easter egg check:', {
+        dhanushWon,
+        isTeamMode,
+        seats: seats.map(s => ({ name: s.name, avatar_id: s.avatar_id, player_id: s.player_id, seat_index: s.seat_index, team_id: s.team_id })),
+        allRoundsCount: allRounds.length,
+        sampleRoundScores: allRounds[allRounds.length - 1]?.scores,
+        sampleRoundTeamScores: allRounds[allRounds.length - 1]?.team_scores,
+      });
 
       if (dhanushWon) {
         setTimeout(() => setShowVictoryEgg(true), 3000);
