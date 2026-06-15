@@ -591,8 +591,8 @@ function computePlayerStats(matches) {
     const playerSnap = match.player_snapshot || [];
     const roundBreakdown = match.round_breakdown || [];
 
-    const sortedScores = Object.entries(finalScores).sort((a, b) => b[1] - a[1]);
-    const winnerId = sortedScores[0]?.[0];
+   const sortedScores = Object.entries(finalScores).sort((a, b) => b[1] - a[1]);
+    const topScore = sortedScores[0]?.[1] ?? 0;
 
     for (const p of playerSnap) {
       const identifier = getIdentifier(p.name, p.avatar_id);
@@ -613,7 +613,8 @@ function computePlayerStats(matches) {
       s.matchesPlayed += 1;
 
       const myScore = finalScores[p.player_id] ?? 0;
-      const iWon = p.player_id === winnerId;
+      // Tied at top = win (everyone tied at max gets a W)
+      const iWon = (p.player_id in finalScores) && myScore === topScore;
 
       s.totalPoints += myScore;
       if (myScore > s.bestMatch) s.bestMatch = myScore;
@@ -673,7 +674,7 @@ function computePairStats(matches) {
     const roundBreakdown = match.round_breakdown || [];
 
     const sortedScores = Object.entries(finalScores).sort((a, b) => b[1] - a[1]);
-    const winnerTeamId = sortedScores[0]?.[0];
+    const topScore = sortedScores[0]?.[1] ?? 0;
 
     for (const team of teamSnap) {
       const members = team.members || [];
@@ -686,7 +687,8 @@ function computePairStats(matches) {
       }));
 
       const teamScore = finalScores[team.team_id] ?? 0;
-      const teamWon = team.team_id === winnerTeamId;
+      // Tied at top = win (all teams tied at max get a W)
+      const teamWon = (team.team_id in finalScores) && teamScore === topScore;
 
       // Generate all unique 2-player sub-pairs from this team
       for (let i = 0; i < resolved.length; i++) {
@@ -765,6 +767,8 @@ function computePairStats(matches) {
 function MatchDetail({ match, onBack, onClose }) {
   const isTeam = match.mode === 'team';
   const ranked = buildRanking(match);
+  const matchTopScore = ranked[0]?.total ?? 0;
+  const winnersCount = ranked.filter((r) => r.total === matchTopScore).length;
   const completedRounds = (match.round_breakdown || []).filter((r) => r.completed);
 
   const date = new Date(match.completed_at);
@@ -812,13 +816,17 @@ function MatchDetail({ match, onBack, onClose }) {
                   key={r.id}
                   className="flex items-center justify-between px-3 py-2 rounded-lg"
                   style={{
-                    background: idx === 0 ? `${r.color}18` : '#14271f',
-                    border: idx === 0 ? `1.5px solid ${r.color}80` : '1px solid rgba(34, 78, 60, 0.4)',
+                    background: r.total === matchTopScore ? `${r.color}18` : '#14271f',
+                    border: r.total === matchTopScore ? `1.5px solid ${r.color}80` : '1px solid rgba(34, 78, 60, 0.4)',
                   }}
                 >
                   <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-base font-serif italic w-6 text-center" style={{ color: idx === 0 ? r.color : '#86a294' }}>
-                      {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `${idx + 1}`}
+                    <span className="text-base font-serif italic w-6 text-center" style={{ color: r.total === matchTopScore ? r.color : '#86a294' }}>
+                      {r.total === matchTopScore
+                        ? '🥇'
+                        : idx === winnersCount ? '🥈'
+                        : idx === winnersCount + 1 ? '🥉'
+                        : `${idx + 1}`}
                     </span>
                     {isTeam && <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: r.color }} />}
                     <div className="flex items-center gap-1 flex-shrink-0">
