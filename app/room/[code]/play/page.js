@@ -625,14 +625,16 @@ async function handleLockIndivBid() {
       }
 
       if (allTotals.length > 0) {
-        if (myTotal === winningTotal) {
+        // Sound effect: ANYONE tied at the top counts as a winner
+        const iAmAmongWinners = myTotal === winningTotal;
+        if (iAmAmongWinners) {
           sounds.play('matchWin');
         } else {
           sounds.play('matchLose');
         }
       }
 
-      // ── EASTER EGG: Dhanush victory popup (shows for EVERYONE) ──
+      // ── EASTER EGG: Dhanush victory popup (fires if Dhanush is tied for first) ──
       const isDhanushIdentifier = (name, avatarId) => {
         const lower = (name || '').toLowerCase().trim();
         return lower === 'dhanush' || avatarId === 'friend:dhanush';
@@ -647,9 +649,11 @@ async function handleLockIndivBid() {
             teamTotals[tId] = (teamTotals[tId] ?? 0) + score;
           }
         }
-        const sortedTeams = Object.entries(teamTotals).sort((a, b) => b[1] - a[1]);
-        const winningTeamId = sortedTeams[0]?.[0];
-        const winningSeats = seats.filter((s) => s.team_id === winningTeamId);
+        const maxTeamScore = Math.max(...Object.values(teamTotals));
+        const winningTeamIds = Object.entries(teamTotals)
+          .filter(([, score]) => score === maxTeamScore)
+          .map(([tId]) => tId);
+        const winningSeats = seats.filter((s) => winningTeamIds.includes(s.team_id));
         dhanushWon = winningSeats.some((s) => isDhanushIdentifier(s.name, s.avatar_id));
       } else {
         const indivTotals = {};
@@ -659,25 +663,16 @@ async function handleLockIndivBid() {
             indivTotals[pid] = (indivTotals[pid] ?? 0) + score;
           }
         }
-        const sortedPlayers = Object.entries(indivTotals).sort((a, b) => b[1] - a[1]);
-        const winnerId = sortedPlayers[0]?.[0];
-        const winnerSeat = seats.find((s) => s.player_id === winnerId);
-        if (winnerSeat) {
-          dhanushWon = isDhanushIdentifier(winnerSeat.name, winnerSeat.avatar_id);
-        }
+        const maxScore = Math.max(...Object.values(indivTotals));
+        const winnerIds = Object.entries(indivTotals)
+          .filter(([, score]) => score === maxScore)
+          .map(([pid]) => pid);
+        const winningSeats = seats.filter((s) => winnerIds.includes(s.player_id));
+        dhanushWon = winningSeats.some((s) => isDhanushIdentifier(s.name, s.avatar_id));
       }
 
-      // console.log('🎯 Easter egg check:', {
-      //   dhanushWon,
-      //   isTeamMode,
-      //   seats: seats.map(s => ({ name: s.name, avatar_id: s.avatar_id, player_id: s.player_id, seat_index: s.seat_index, team_id: s.team_id })),
-      //   allRoundsCount: allRounds.length,
-      //   sampleRoundScores: allRounds[allRounds.length - 1]?.scores,
-      //   sampleRoundTeamScores: allRounds[allRounds.length - 1]?.team_scores,
-      // });
-
       if (dhanushWon) {
-        setTimeout(() => setShowVictoryEgg(true), 5000);
+        setTimeout(() => setShowVictoryEgg(true), 3000);
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -770,17 +765,25 @@ async function handleLockIndivBid() {
 
       const entries = Object.entries(final_scores);
       entries.sort((a, b) => b[1] - a[1]);
-      const winnerId = entries[0]?.[0];
       const winnerScore = entries[0]?.[1] ?? 0;
-      let winnerLabel = '';
-      if (winnerId) {
+      // Find ALL entries tied at the top (handles ties)
+      const tiedWinnerIds = entries.filter(([, s]) => s === winnerScore).map(([id]) => id);
+      const tiedLabels = tiedWinnerIds.map((id) => {
         if (isTeamMode) {
-          const t = team_snapshot.find((tt) => tt.team_id === winnerId);
-          winnerLabel = t?.label ?? 'Unknown';
+          const t = team_snapshot.find((tt) => tt.team_id === id);
+          return t?.label ?? 'Unknown';
         } else {
-          const p = player_snapshot.find((pp) => pp.player_id === winnerId);
-          winnerLabel = p?.name ?? 'Unknown';
+          const p = player_snapshot.find((pp) => pp.player_id === id);
+          return p?.name ?? 'Unknown';
         }
+      });
+      let winnerLabel = '';
+      if (tiedLabels.length === 1) {
+        winnerLabel = tiedLabels[0];
+      } else if (tiedLabels.length === 2) {
+        winnerLabel = tiedLabels.join(' & ');
+      } else if (tiedLabels.length > 2) {
+        winnerLabel = tiedLabels.slice(0, -1).join(', ') + ' & ' + tiedLabels[tiedLabels.length - 1];
       }
 
       const matchId = Math.random().toString(36).slice(2, 14);
@@ -1704,7 +1707,10 @@ function GameOverScreen({
     })).sort((a, b) => b.total - a.total);
   }
 
-  const winner = ranked[0];
+  const topScore = ranked[0]?.total ?? 0;
+  const winners = ranked.filter((r) => r.total === topScore);
+  const isTie = winners.length > 1;
+  const winner = winners[0]; // for color fallback
   const completedRounds = allRounds.filter((r) => r.completed_at);
 
   return (
@@ -1713,23 +1719,49 @@ function GameOverScreen({
       {showConfetti && <ConfettiBurst />}
 
       <div className="max-w-md mx-auto relative z-10">
-        <div className="text-center mb-6">
+       <div className="text-center mb-6">
           <p className="text-xs uppercase tracking-widest text-emerald-200/60 mb-1">Room {code}</p>
           <p className="text-emerald-200/40 text-xs uppercase tracking-widest mb-3">Match complete</p>
-          <h1 className="text-2xl font-serif italic text-amber-200/80 mb-2">🏆 Winners</h1>
-          <div
-            className="text-3xl md:text-4xl font-serif italic font-bold leading-tight px-4 py-3 rounded-2xl inline-block"
-            style={{
-              color: winner?.color ?? '#f5d989',
-              background: `${winner?.color ?? '#f5d989'}15`,
-              border: `2px solid ${winner?.color ?? '#f5d989'}80`,
-              boxShadow: `0 0 30px ${winner?.color ?? '#f5d989'}40`,
-            }}>
-            {winner?.label}
-          </div>
-          <p className="text-amber-200 text-2xl font-serif italic mt-3">
-            {winner?.total > 0 ? '+' : ''}{winner?.total}
-          </p>
+          {isTie ? (
+            <>
+              <h1 className="text-2xl font-serif italic text-amber-200/80 mb-3">🤝 It's a tie!</h1>
+              <div className="flex flex-wrap justify-center gap-2">
+                {winners.map((w) => (
+                  <div
+                    key={w.id}
+                    className="text-2xl md:text-3xl font-serif italic font-bold leading-tight px-4 py-2 rounded-2xl"
+                    style={{
+                      color: w.color,
+                      background: `${w.color}15`,
+                      border: `2px solid ${w.color}80`,
+                      boxShadow: `0 0 24px ${w.color}40`,
+                    }}>
+                    {w.label}
+                  </div>
+                ))}
+              </div>
+              <p className="text-amber-200 text-2xl font-serif italic mt-3">
+                {topScore > 0 ? '+' : ''}{topScore}
+              </p>
+            </>
+          ) : (
+            <>
+              <h1 className="text-2xl font-serif italic text-amber-200/80 mb-2">🏆 Winner</h1>
+              <div
+                className="text-3xl md:text-4xl font-serif italic font-bold leading-tight px-4 py-3 rounded-2xl inline-block"
+                style={{
+                  color: winner?.color ?? '#f5d989',
+                  background: `${winner?.color ?? '#f5d989'}15`,
+                  border: `2px solid ${winner?.color ?? '#f5d989'}80`,
+                  boxShadow: `0 0 30px ${winner?.color ?? '#f5d989'}40`,
+                }}>
+                {winner?.label}
+              </div>
+              <p className="text-amber-200 text-2xl font-serif italic mt-3">
+                {winner?.total > 0 ? '+' : ''}{winner?.total}
+              </p>
+            </>
+          )}
         </div>
 
         <div className="bg-emerald-950/30 border border-emerald-900/60 rounded-2xl p-5 mb-4">
@@ -1739,18 +1771,22 @@ function GameOverScreen({
               <div
                 key={r.id}
                 className="flex items-center justify-between px-3 py-3 rounded-xl"
-                style={{
-                  background: idx === 0
+               style={{
+                  background: r.total === topScore
                     ? `${r.color}18`
                     : '#14271f',
-                  border: idx === 0
+                  border: r.total === topScore
                     ? `1.5px solid ${r.color}80`
                     : '1px solid rgba(34, 78, 60, 0.4)',
                 }}>
                 <div className="flex items-center gap-3 min-w-0">
                   <span className="text-lg font-serif italic w-6 text-center"
-                    style={{ color: idx === 0 ? r.color : '#86a294' }}>
-                    {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `${idx + 1}`}
+                    style={{ color: r.total === topScore ? r.color : '#86a294' }}>
+                    {r.total === topScore
+                      ? '🥇'
+                      : idx === winners.length ? '🥈'
+                      : idx === winners.length + 1 ? '🥉'
+                      : `${idx + 1}`}
                   </span>
                   {isTeamMode && (
                     <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: r.color }} />
