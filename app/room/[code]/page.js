@@ -22,6 +22,7 @@ import ThemeAnimation from '@/components/ThemeAnimation';
 import VoicePanel from '@/components/VoicePanel';
 import { useVoiceChat } from '@/lib/useVoiceChat';
 import InstallAppButton from '@/components/InstallAppButton';
+import { notifyDhanush } from '@/lib/notify';
 
 
 export default function RoomPage({ params }) {
@@ -311,6 +312,17 @@ export default function RoomPage({ params }) {
       status: 'seating',
       current_game_id: gameId,
     }).eq('code', code);
+
+    // Private notification to Dhanush — fire-and-forget, don't await
+    const hostPlayer = players.find((p) => p.id === me?.playerId);
+    notifyDhanush(
+      `${hostPlayer?.name || 'Someone'} started a match in room ${code} (${activePlayers.length} players, ${mode === 'team' ? 'teams' : 'individual'})`,
+      {
+        title: '🎴 New match starting',
+        tags: 'game_die',
+        priority: 'high',
+      }
+    );
   }
 
   if (!meChecked) {
