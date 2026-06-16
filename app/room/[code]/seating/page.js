@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useEffect, useState } from 'react';
+import { use, useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import {
@@ -35,6 +35,8 @@ export default function SeatingPage({ params }) {
   const [drawing, setDrawing] = useState(false);
   const [backing, setBacking] = useState(false);
   const [continuing, setContinuing] = useState(false);
+  const [pickedIdx, setPickedIdx] = useState(null); // for animation
+  const resolveInProgressRef = useRef(false);
 
   useEffect(() => {
     const saved = localStorage.getItem(`spade-room-${code}`);
@@ -169,9 +171,14 @@ export default function SeatingPage({ params }) {
   async function handlePickFromDeck(pickIndex) {
     if (!game || drawing) return;
     setDrawing(true);
+    setPickedIdx(pickIndex);
+
+    // Give the rise+flip animation a moment to play before writing to DB
+    await new Promise((r) => setTimeout(r, 850));
+
     const { data: g } = await supabase
       .from('games').select('shuffled_deck, draw_cursor').eq('id', game.id).single();
-    if (!g) { setDrawing(false); return; }
+    if (!g) { setDrawing(false); setPickedIdx(null); return; }
     const absoluteIdx = (g.draw_cursor ?? 0) + pickIndex;
     const card = g.shuffled_deck[absoluteIdx];
     const newDeck = [...g.shuffled_deck];
@@ -189,6 +196,7 @@ export default function SeatingPage({ params }) {
       .eq('game_id', game.id)
       .eq('player_id', me.playerId);
     setDrawing(false);
+    setPickedIdx(null);
   }
 
   useEffect(() => {
@@ -200,36 +208,52 @@ export default function SeatingPage({ params }) {
       const ties = findTiedGroups(seats);
       if (ties.length === 0) return;
 
-      const { data: g } = await supabase
-        .from('games').select('shuffled_deck, draw_cursor').eq('id', game.id).single();
-      if (!g) return;
-      let cursor = g.draw_cursor ?? 0;
-      const updates = [];
-      for (const group of ties) {
-        const maxLen = Math.max(...group.map((s) => s.cards.length));
-        for (const seat of group) {
-          if (seat.cards.length < maxLen ||
-              group.some((other) =>
-                other !== seat &&
-                other.cards.length === maxLen &&
-                rankChainKey(other.cards) === rankChainKey(seat.cards))) {
-            const card = g.shuffled_deck[cursor++];
-            updates.push({
-              game_id: game.id,
-              player_id: seat.player_id,
-              cards: [...seat.cards, card],
-            });
+      // LOCK: prevent concurrent invocations from racing
+      if (resolveInProgressRef.current) return;
+      resolveInProgressRef.current = true;
+
+      try {
+        const { data: g } = await supabase
+          .from('games').select('shuffled_deck, draw_cursor').eq('id', game.id).single();
+        if (!g) return;
+        let cursor = g.draw_cursor ?? 0;
+        const updates = [];
+        for (const group of ties) {
+          const maxLen = Math.max(...group.map((s) => s.cards.length));
+          for (const seat of group) {
+            if (seat.cards.length < maxLen ||
+                group.some((other) =>
+                  other !== seat &&
+                  other.cards.length === maxLen &&
+                  rankChainKey(other.cards) === rankChainKey(seat.cards))) {
+              // Safety: bail if we'd run out of cards
+              if (cursor >= g.shuffled_deck.length) {
+                console.error('Tie-breaker ran out of cards');
+                return;
+              }
+              const card = g.shuffled_deck[cursor++];
+              updates.push({
+                game_id: game.id,
+                player_id: seat.player_id,
+                cards: [...seat.cards, card],
+              });
+            }
           }
         }
-      }
-      if (updates.length === 0) return;
-      await new Promise((r) => setTimeout(r, 1500));
-      await supabase.from('games').update({ draw_cursor: cursor }).eq('id', game.id);
-      for (const u of updates) {
-        await supabase.from('game_seats')
-          .update({ cards: u.cards })
-          .eq('game_id', u.game_id)
-          .eq('player_id', u.player_id);
+        if (updates.length === 0) return;
+        await new Promise((r) => setTimeout(r, 1500));
+        await supabase.from('games').update({ draw_cursor: cursor }).eq('id', game.id);
+        // Write all updates in parallel (faster, and atomic from React's view)
+        await Promise.all(updates.map((u) =>
+          supabase.from('game_seats')
+            .update({ cards: u.cards })
+            .eq('game_id', u.game_id)
+            .eq('player_id', u.player_id)
+        ));
+      } finally {
+        // Release lock so the NEXT seats update can trigger another resolve pass
+        // (in case tie-breakers ALSO tied)
+        resolveInProgressRef.current = false;
       }
     }
     autoResolveTies();
@@ -396,6 +420,7 @@ export default function SeatingPage({ params }) {
                   count={cardsRemaining}
                   onPick={handlePickFromDeck}
                   disabled={!canIPick || drawing}
+                  pickedIdx={pickedIdx}
                 />
 
                 {mySeat && mySeat.cards.length > 0 && (
@@ -492,56 +517,123 @@ export default function SeatingPage({ params }) {
 }
 
 // ──────────────────────────────────────────────────────────
-// Fanned-out face-down deck — like cards spread across a table
+// Fanned-out face-down deck — wider spread, taller arc, with
+// satisfying rise+flip animation when a card is picked
 // ──────────────────────────────────────────────────────────
-function FannedDeck({ count, onPick, disabled }) {
+function FannedDeck({ count, onPick, disabled, pickedIdx }) {
   if (count <= 0) return null;
   const maxDisplay = Math.min(count, 52);
   const cards = Array.from({ length: maxDisplay }, (_, i) => i);
 
-  const spreadWidth = 280;
-  const cardW = 44;
-  const cardH = 62;
-  const gap = maxDisplay > 1 ? Math.min(8, (spreadWidth - cardW) / (maxDisplay - 1)) : 0;
+  // Bigger, more theatrical fan
+  const spreadWidth = 320;
+  const cardW = 52;
+  const cardH = 74;
+  const gap = maxDisplay > 1 ? Math.min(11, (spreadWidth - cardW) / (maxDisplay - 1)) : 0;
   const totalWidth = cardW + gap * (maxDisplay - 1);
-  const arcHeight = 18;
+  const arcHeight = 26;
+  const maxRotate = 18;
 
   return (
-    <div className="relative w-full overflow-hidden" style={{ height: cardH + arcHeight + 8 }}>
+    <div
+      className="relative w-full"
+      style={{
+        height: cardH + arcHeight + 90, // extra room for the card to rise into
+        perspective: '1000px',
+        overflow: 'visible',
+      }}
+    >
       <div
         className="relative mx-auto"
-        style={{ width: totalWidth, height: cardH + arcHeight }}
+        style={{
+          width: totalWidth,
+          height: cardH + arcHeight,
+          marginTop: 90, // push fan down so picked card has room above
+        }}
       >
         {cards.map((i) => {
           const t = maxDisplay === 1 ? 0 : (i / (maxDisplay - 1)) * 2 - 1;
           const y = Math.abs(t) * arcHeight;
-          const rotate = t * 14;
+          const rotate = t * maxRotate;
           const x = i * gap;
+          const isPicked = pickedIdx === i;
+          const otherPicked = pickedIdx !== null && pickedIdx !== i;
+
           return (
             <button
               key={i}
               onClick={() => !disabled && onPick(i)}
-              disabled={disabled}
-              className={`absolute transition-transform ${
-                disabled
-                  ? 'cursor-not-allowed opacity-70'
-                  : 'cursor-pointer hover:-translate-y-3 active:scale-95'
-              }`}
+              disabled={disabled || pickedIdx !== null}
+              className={`absolute ${
+                disabled || pickedIdx !== null
+                  ? 'cursor-not-allowed'
+                  : 'cursor-pointer'
+              } ${!disabled && pickedIdx === null ? 'fan-card-hover' : ''}`}
               style={{
                 left: x,
                 top: y,
-                transform: `rotate(${rotate}deg)`,
-                transformOrigin: 'bottom center',
                 width: cardW,
                 height: cardH,
-                zIndex: i,
+                zIndex: isPicked ? 100 : i,
+                transformOrigin: 'bottom center',
+                // Animation: picked card rises + flips, others fade slightly
+                transform: isPicked
+                  ? `translate(${(totalWidth / 2 - x - cardW / 2)}px, -${cardH + 70}px) rotate(0deg) scale(1.35) rotateY(180deg)`
+                  : `rotate(${rotate}deg)`,
+                opacity: otherPicked ? 0.35 : 1,
+                transition: pickedIdx !== null
+                  ? 'transform 0.75s cubic-bezier(0.25, 1.2, 0.5, 1), opacity 0.4s ease'
+                  : 'transform 0.18s ease',
+                transformStyle: 'preserve-3d',
               }}
             >
-              <CardBack width="100%" height="100%" />
+              {/* Back of card (visible until mid-flip) */}
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  backfaceVisibility: 'hidden',
+                  WebkitBackfaceVisibility: 'hidden',
+                }}
+              >
+                <CardBack width="100%" height="100%" />
+              </div>
+              {/* Face of card (placeholder gold sheen — actual card reveals in the slot below) */}
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  backfaceVisibility: 'hidden',
+                  WebkitBackfaceVisibility: 'hidden',
+                  transform: 'rotateY(180deg)',
+                  borderRadius: 8,
+                  background: 'linear-gradient(135deg, #f5d989 0%, #d4a857 100%)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 8px 28px rgba(245, 217, 137, 0.5)',
+                  fontSize: 36,
+                }}
+              >
+                ✦
+              </div>
             </button>
           );
         })}
       </div>
+
+      <style jsx>{`
+        .fan-card-hover {
+          transition: transform 0.18s ease;
+        }
+        .fan-card-hover:hover {
+          transform: translateY(-12px) rotate(0deg) scale(1.08) !important;
+          z-index: 50 !important;
+        }
+        .fan-card-hover:active {
+          transform: translateY(-8px) scale(0.96) !important;
+        }
+      `}</style>
     </div>
   );
 }
