@@ -45,6 +45,7 @@ export default function HomePage() {
  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [resumeRoom, setResumeRoom] = useState(null);
+  const [showResumePopup, setShowResumePopup] = useState(false);
 
   function handleDismissResume() {
     if (!resumeRoom) return;
@@ -56,6 +57,7 @@ export default function HomePage() {
       localStorage.setItem('spade-dismissed-resumes', JSON.stringify(dismissed));
     }
     setResumeRoom(null);
+    setShowResumePopup(false);
   }
 
   // On mount, look for a saved game in localStorage that's still active
@@ -259,45 +261,80 @@ export default function HomePage() {
     return (
       <>
         {showSplash && <SplashScreen onDone={() => setShowSplash(false)} />}
-        <main className="min-h-screen flex items-center justify-center bg-gradient-to-b from-[#0a1410] to-[#0f3d2c] px-6">
+        <main className="min-h-screen flex items-center justify-center bg-gradient-to-b from-[#0a1410] to-[#0f3d2c] px-6 relative">
+
+        {/* Floating (!) badge — top right, shows only if there's a resumable game */}
+        {resumeRoom && (
+          <button
+            onClick={() => setShowResumePopup(true)}
+            className="fixed top-4 right-4 z-30 w-11 h-11 rounded-full bg-amber-300 text-[#07100c] shadow-lg hover:bg-amber-200 active:scale-95 transition flex items-center justify-center font-bold text-xl"
+            title="You have a game to resume"
+            aria-label="You have a game to resume"
+            style={{
+              animation: 'resumeBadgePulse 1.8s ease-in-out infinite',
+            }}
+          >
+            !
+          </button>
+        )}
+
+        {/* Resume game popup */}
+        {showResumePopup && resumeRoom && (
+          <div
+            className="fixed inset-0 bg-black/70 backdrop-blur-sm z-40 flex items-center justify-center p-5"
+            onClick={() => setShowResumePopup(false)}
+          >
+            <div
+              className="relative max-w-sm w-full bg-[#0f1d18] border border-amber-300/40 rounded-2xl p-5 text-left"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                onClick={handleDismissResume}
+                className="absolute top-2 right-2 w-8 h-8 rounded-full flex items-center justify-center text-emerald-200/60 hover:text-emerald-100 hover:bg-emerald-950/40 transition text-2xl leading-none"
+                title="Don't show again"
+                aria-label="Dismiss"
+              >
+                ×
+              </button>
+              <p className="text-[10px] uppercase tracking-widest text-amber-200/70 mb-3 pr-6">Resume game</p>
+              <div className="flex items-center gap-3 mb-4">
+                <Avatar avatarId={resumeRoom.avatarId} playerName={resumeRoom.playerName} size="lg" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-amber-100 font-semibold truncate">
+                    Room <span className="font-mono">{resumeRoom.code}</span>
+                  </p>
+                  <p className="text-emerald-200/60 text-xs truncate">
+                    As {resumeRoom.playerName} · {statusLabel(resumeRoom.roomStatus, resumeRoom.gameStatus)}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => router.push(`/room/${resumeRoom.code}`)}
+                className="w-full py-3 rounded-lg font-semibold bg-amber-300 text-[#07100c] text-sm hover:bg-amber-200 transition"
+              >
+                Tap to rejoin →
+              </button>
+              <p className="text-[10px] text-emerald-200/40 text-center mt-3">
+                Tap the × above to hide this game from the home screen.
+              </p>
+            </div>
+          </div>
+        )}
+
+        <style jsx>{`
+          @keyframes resumeBadgePulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(245, 217, 137, 0.7), 0 4px 12px rgba(0,0,0,0.4); }
+            50%      { box-shadow: 0 0 0 10px rgba(245, 217, 137, 0), 0 4px 12px rgba(0,0,0,0.4); }
+          }
+        `}</style>
+
         <div className="max-w-sm w-full text-center">
           <p className="text-xs uppercase tracking-widest text-emerald-200/60 mb-2">welcome to</p>
           <h1 className="text-4xl font-serif italic text-amber-200 mb-2">The Spade Room</h1>
           <p className="text-emerald-200/50 text-sm mb-10">
             Play Spades online with friends.
           </p>
-       {resumeRoom && (
-          <div className="relative mb-4 bg-amber-300/10 border border-amber-300/40 rounded-2xl p-4 text-left">
-            <button
-              onClick={handleDismissResume}
-              className="absolute top-2 right-2 w-7 h-7 rounded-full flex items-center justify-center text-emerald-200/50 hover:text-emerald-100 hover:bg-emerald-950/40 transition text-lg leading-none"
-              title="Dismiss"
-              aria-label="Dismiss resume card"
-            >
-              ×
-            </button>
-            <div className="flex items-center gap-3 mb-3 pr-6">
-              <Avatar avatarId={resumeRoom.avatarId} playerName={resumeRoom.playerName} size="lg" />
-              <div className="flex-1 min-w-0">
-                <p className="text-[10px] uppercase tracking-widest text-amber-200/70 mb-0.5">Resume game</p>
-                <p className="text-amber-100 font-semibold truncate">
-                  Room <span className="font-mono">{resumeRoom.code}</span>
-                </p>
-                <p className="text-emerald-200/60 text-xs truncate">
-                  As {resumeRoom.playerName} · {statusLabel(resumeRoom.roomStatus, resumeRoom.gameStatus)}
-                </p>
-              </div>
-            </div>
-            <button
-              onClick={() => router.push(`/room/${resumeRoom.code}`)}
-              className="w-full py-2.5 rounded-lg font-semibold bg-amber-300 text-[#07100c] text-sm hover:bg-amber-200 transition"
-            >
-              Tap to rejoin →
-            </button>
-          </div>
-        )}
-
-        <div className="space-y-3">
+       <div className="space-y-3">
             <button
               onClick={() => setMode('create')}
               className="w-full py-4 rounded-xl font-semibold bg-gradient-to-b from-amber-200 to-amber-400 text-[#07100c]"
