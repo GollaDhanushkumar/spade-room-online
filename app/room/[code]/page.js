@@ -23,6 +23,7 @@ import VoicePanel from '@/components/VoicePanel';
 import { useVoiceChat } from '@/lib/useVoiceChat';
 import InstallAppButton from '@/components/InstallAppButton';
 import { notifyDhanush } from '@/lib/notify';
+import { useEmojiReactions, EmojiPicker, FloatingEmoji } from '@/components/EmojiBurst';
 
 
 export default function RoomPage({ params }) {
@@ -62,6 +63,8 @@ export default function RoomPage({ params }) {
     myPlayerId: me?.playerId,
     otherPlayerIds,
   });
+  const { activeReactions, sendReaction } = useEmojiReactions({ roomCode: code, myPlayerId: me?.playerId });
+  const [emojiTarget, setEmojiTarget] = useState(null); // { playerId, name, rect }
 
   useEffect(() => {
     const saved = localStorage.getItem(`spade-room-${code}`);
@@ -431,7 +434,14 @@ export default function RoomPage({ params }) {
               return (
                 <li key={p.id} className="flex items-center justify-between px-4 py-3 rounded-xl bg-[#14271f] border border-emerald-900/50">
                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="relative">
+                   <button
+                      onClick={(e) => {
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        setEmojiTarget({ playerId: p.id, name: p.name, rect });
+                      }}
+                      className="relative cursor-pointer hover:scale-105 active:scale-95 transition-transform"
+                      title="Send a reaction"
+                    >
                       <Avatar avatarId={p.avatar_id} playerName={p.name} size="sm" />
                       {voice.talkingPlayers.has(p.id) && (
                         <span
@@ -442,7 +452,8 @@ export default function RoomPage({ params }) {
                           }}
                         />
                       )}
-                    </div>
+                      <FloatingEmoji emoji={activeReactions[p.id]?.emoji} />
+                    </button>
                     <span className="font-medium truncate">
                       {p.name}
                       {isMe && <span className="text-emerald-200/40 text-xs ml-2">(you)</span>}
@@ -556,6 +567,16 @@ export default function RoomPage({ params }) {
             </div>
           </div>
         </div>
+      )}
+
+      {emojiTarget && (
+        <EmojiPicker
+          targetPlayerId={emojiTarget.playerId}
+          targetName={emojiTarget.name}
+          anchorRect={emojiTarget.rect}
+          onPick={(emoji) => sendReaction(emojiTarget.playerId, emoji)}
+          onClose={() => setEmojiTarget(null)}
+        />
       )}
 
       {/* Settings Modal */}

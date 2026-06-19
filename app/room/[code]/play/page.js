@@ -31,6 +31,7 @@ import { usePresence, useStalePlayers } from '@/lib/usePresence';
 import { useHostPromotion } from '@/lib/useHostPromotion';
 import { useRoomTheme } from '@/lib/useRoomTheme';
 import CardBack from '@/components/CardBack';
+import { useEmojiReactions, EmojiPicker, FloatingEmoji } from '@/components/EmojiBurst';
 
 // Detect mobile for responsive table sizing
 function useIsMobile() {
@@ -106,6 +107,8 @@ export default function PlayPage({ params }) {
     myPlayerId: me?.playerId,
     otherPlayerIds,
   });
+  const { activeReactions, sendReaction } = useEmojiReactions({ roomCode: code, myPlayerId: me?.playerId });
+  const [emojiTarget, setEmojiTarget] = useState(null);
 
   useEffect(() => {
     if (!me) return;
@@ -1610,7 +1613,7 @@ const round_breakdown = allRounds.map((r) => ({
             </div>
           )}
 
-          <PlayTable
+         <PlayTable
             seats={seatedPlayers}
             allHands={allHands}
             mySeat={mySeat}
@@ -1618,6 +1621,8 @@ const round_breakdown = allRounds.map((r) => ({
             currentPlayerSeatIdx={currentPlayerSeatIdx}
             revealedWinner={revealedWinner}
             talkingPlayers={voice.talkingPlayers}
+            reactions={activeReactions}
+            onReact={(t) => setEmojiTarget(t)}
           />
 
           <div className="bg-emerald-950/30 border border-emerald-900/60 rounded-2xl p-3 mt-3">
@@ -1660,6 +1665,15 @@ const round_breakdown = allRounds.map((r) => ({
           trickHistory={round?.trick_history || []}
           mePlayerId={me?.playerId}
           roundNum={game?.current_round || 1}
+        />
+      )}
+      {emojiTarget && (
+        <EmojiPicker
+          targetPlayerId={emojiTarget.playerId}
+          targetName={emojiTarget.name}
+          anchorRect={emojiTarget.rect}
+          onPick={(emoji) => sendReaction(emojiTarget.playerId, emoji)}
+          onClose={() => setEmojiTarget(null)}
         />
       )}
       </>
@@ -1956,7 +1970,7 @@ function ConfettiBurst() {
 // ──────────────────────────────────────────────────────────
 // PlayTable
 // ──────────────────────────────────────────────────────────
-function PlayTable({ seats, allHands, mySeat, currentTrick, currentPlayerSeatIdx, revealedWinner, talkingPlayers }) {
+function PlayTable({ seats, allHands, mySeat, currentTrick, currentPlayerSeatIdx, revealedWinner, talkingPlayers, reactions, onReact }) {
   const N = seats.length;
   if (N === 0 || !mySeat) return null;
 
@@ -2062,7 +2076,12 @@ function PlayTable({ seats, allHands, mySeat, currentTrick, currentPlayerSeatIdx
               zIndex: isWinningSeat ? 8 : 3,
             }}>
            <PlayerSeat
-              seat={{ ...seat, _talking: talkingPlayers?.has(seat.player_id) ?? false }}
+              seat={{
+                ...seat,
+                _talking: talkingPlayers?.has(seat.player_id) ?? false,
+                _reaction: reactions?.[seat.player_id]?.emoji,
+                _onReact: onReact,
+              }}
               isMe={isMe}
               isTurn={isTurn}
               isWinningSeat={isWinningSeat}
@@ -2131,7 +2150,15 @@ function PlayerSeat({ seat, isMe, isTurn, isWinningSeat, cardCount, teamColor })
       )}
 
      <div className="flex items-center gap-1.5 mt-1">
-        <div className="relative">
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            const rect = e.currentTarget.getBoundingClientRect();
+            seat._onReact?.({ playerId: seat.player_id, name: seat.name, rect });
+          }}
+          className="relative cursor-pointer hover:scale-110 active:scale-95 transition-transform"
+          title="Send a reaction"
+        >
           <Avatar avatarId={seat.avatar_id} playerName={seat.name} size="xs" borderColor={teamColor} />
           {seat._talking && (
             <span
@@ -2142,7 +2169,8 @@ function PlayerSeat({ seat, isMe, isTurn, isWinningSeat, cardCount, teamColor })
               }}
             />
           )}
-        </div>
+          {seat._reaction && <FloatingEmoji emoji={seat._reaction} />}
+        </button>
         <div
           className="px-2 py-0.5 rounded-md text-[11px] font-medium whitespace-nowrap shadow-md"
           style={{
