@@ -46,20 +46,37 @@ export default function HomePage() {
   const [error, setError] = useState('');
   const [resumeRoom, setResumeRoom] = useState(null);
 
+  function handleDismissResume() {
+    if (!resumeRoom) return;
+    // Mark this room as dismissed so it won't show again on home screen
+    // (but localStorage entry stays — they can still manually join via the code)
+    const dismissed = JSON.parse(localStorage.getItem('spade-dismissed-resumes') || '[]');
+    if (!dismissed.includes(resumeRoom.code)) {
+      dismissed.push(resumeRoom.code);
+      localStorage.setItem('spade-dismissed-resumes', JSON.stringify(dismissed));
+    }
+    setResumeRoom(null);
+  }
+
   // On mount, look for a saved game in localStorage that's still active
   useEffect(() => {
     let cancelled = false;
     async function checkForResumableRoom() {
-      const candidates = [];
+     const candidates = [];
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
         if (key && key.startsWith('spade-room-')) candidates.push(key);
       }
       if (candidates.length === 0) return;
 
+      // Skip rooms the user previously dismissed
+      const dismissedRaw = localStorage.getItem('spade-dismissed-resumes');
+      const dismissed = dismissedRaw ? JSON.parse(dismissedRaw) : [];
+
       let best = null;
       for (const key of candidates) {
         const code = key.replace('spade-room-', '');
+        if (dismissed.includes(code)) continue; // user said no
         let saved;
         try {
           saved = JSON.parse(localStorage.getItem(key));
@@ -249,9 +266,17 @@ export default function HomePage() {
           <p className="text-emerald-200/50 text-sm mb-10">
             Play Spades online with friends.
           </p>
-        {resumeRoom && (
-          <div className="mb-4 bg-amber-300/10 border border-amber-300/40 rounded-2xl p-4 text-left">
-            <div className="flex items-center gap-3 mb-3">
+       {resumeRoom && (
+          <div className="relative mb-4 bg-amber-300/10 border border-amber-300/40 rounded-2xl p-4 text-left">
+            <button
+              onClick={handleDismissResume}
+              className="absolute top-2 right-2 w-7 h-7 rounded-full flex items-center justify-center text-emerald-200/50 hover:text-emerald-100 hover:bg-emerald-950/40 transition text-lg leading-none"
+              title="Dismiss"
+              aria-label="Dismiss resume card"
+            >
+              ×
+            </button>
+            <div className="flex items-center gap-3 mb-3 pr-6">
               <Avatar avatarId={resumeRoom.avatarId} playerName={resumeRoom.playerName} size="lg" />
               <div className="flex-1 min-w-0">
                 <p className="text-[10px] uppercase tracking-widest text-amber-200/70 mb-0.5">Resume game</p>
