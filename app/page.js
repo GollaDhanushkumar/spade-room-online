@@ -26,7 +26,13 @@ function generatePlayerId() {
 function generateToken() {
   return Math.random().toString(36).slice(2, 18);
 }
-
+function statusLabel(roomStatus, gameStatus) {
+  if (roomStatus === 'lobby') return 'Waiting in lobby';
+  if (gameStatus === 'seating') return 'Drawing for seats';
+  if (gameStatus === 'bidding') return 'Bidding';
+  if (gameStatus === 'playing') return 'Match in progress';
+  return 'Match in progress';
+}
 export default function HomePage() {
   const router = useRouter();
   const [showSplash, setShowSplash] = useState(true);
@@ -36,8 +42,103 @@ export default function HomePage() {
   const [selectedAvatarId, setSelectedAvatarId] = useState(null);
   const [takenAvatars, setTakenAvatars] = useState([]);
   const [showAvatarPicker, setShowAvatarPicker] = useState(false);
-  const [loading, setLoading] = useState(false);
+ const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [resumeRoom, setResumeRoom] = useState(null);
+
+  // On mount, look for a saved game in localStorage that's still active
+  useEffect(() => {
+    let cancelled = false;
+    async function checkForResumableRoom() {
+      const candidates = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('spade-room-')) candidates.push(key);
+      }
+      if (candidates.length === 0) return;
+
+      let best = null;
+      for (const key of candidates) {
+        const code = key.replace('spade-room-', '');
+        let saved;
+        try {
+          saved = JSON.parse(localStorage.getItem(key));
+        } catch {
+          localStorage.removeItem(key);
+          continue;
+        }
+        if (!saved?.playerId) {
+          localStorage.removeItem(key);
+          continue;
+        }
+
+        // Fetch the room
+        const { data: roomData } = await supabase
+          .from('rooms')
+          .select('code, status, created_at, current_game_id')
+          .eq('code', code)
+          .maybeSingle();
+
+        if (!roomData) {
+          // Room deleted — clean up
+          localStorage.removeItem(key);
+          continue;
+        }
+
+        // Drop rooms older than 24h
+        if (roomData.created_at) {
+          const ageHours = (Date.now() - new Date(roomData.created_at).getTime()) / 3600000;
+          if (ageHours > 24) {
+            localStorage.removeItem(key);
+            continue;
+          }
+        }
+
+        // Confirm I'm still a player in this room (not kicked)
+        const { data: playerData } = await supabase
+          .from('players')
+          .select('id, name, avatar_id')
+          .eq('id', saved.playerId)
+          .eq('room_code', code)
+          .maybeSingle();
+
+        if (!playerData) {
+          localStorage.removeItem(key);
+          continue;
+        }
+
+        // If a game exists, check it's not already completed
+        let gameStatus = null;
+        if (roomData.current_game_id) {
+          const { data: gameData } = await supabase
+            .from('games')
+            .select('status')
+            .eq('id', roomData.current_game_id)
+            .maybeSingle();
+          gameStatus = gameData?.status ?? null;
+          if (gameStatus === 'completed') continue; // don't surface finished matches
+        }
+
+        const candidate = {
+          code: roomData.code,
+          roomStatus: roomData.status,
+          gameStatus,
+          playerName: playerData.name,
+          avatarId: playerData.avatar_id ?? saved.avatarId,
+        };
+
+        // Prefer active games over plain lobbies
+        const isActive = roomData.status !== 'lobby';
+        if (!best || (isActive && best.roomStatus === 'lobby')) {
+          best = candidate;
+        }
+      }
+
+      if (!cancelled) setResumeRoom(best);
+    }
+    checkForResumableRoom();
+    return () => { cancelled = true; };
+  }, []);
 
   // When in "join" mode and code is 6 chars, fetch already-taken avatars for that room
   useEffect(() => {
@@ -148,6 +249,29 @@ export default function HomePage() {
           <p className="text-emerald-200/50 text-sm mb-10">
             Play Spades online with friends.
           </p>
+        {resumeRoom && (
+          <div className="mb-4 bg-amber-300/10 border border-amber-300/40 rounded-2xl p-4 text-left">
+            <div className="flex items-center gap-3 mb-3">
+              <Avatar avatarId={resumeRoom.avatarId} playerName={resumeRoom.playerName} size="lg" />
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] uppercase tracking-widest text-amber-200/70 mb-0.5">Resume game</p>
+                <p className="text-amber-100 font-semibold truncate">
+                  Room <span className="font-mono">{resumeRoom.code}</span>
+                </p>
+                <p className="text-emerald-200/60 text-xs truncate">
+                  As {resumeRoom.playerName} · {statusLabel(resumeRoom.roomStatus, resumeRoom.gameStatus)}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => router.push(`/room/${resumeRoom.code}`)}
+              className="w-full py-2.5 rounded-lg font-semibold bg-amber-300 text-[#07100c] text-sm hover:bg-amber-200 transition"
+            >
+              Tap to rejoin →
+            </button>
+          </div>
+        )}
+
         <div className="space-y-3">
             <button
               onClick={() => setMode('create')}
