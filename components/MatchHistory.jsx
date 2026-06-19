@@ -770,6 +770,7 @@ function MatchDetail({ match, onBack, onClose }) {
   const matchTopScore = ranked[0]?.total ?? 0;
   const winnersCount = ranked.filter((r) => r.total === matchTopScore).length;
   const completedRounds = (match.round_breakdown || []).filter((r) => r.completed);
+  const mvp = computeMVPFromMatch(match);
 
   const date = new Date(match.completed_at);
   const startDate = new Date(match.started_at);
@@ -807,6 +808,20 @@ function MatchDetail({ match, onBack, onClose }) {
               {isTeam ? 'Team' : 'Individual'} · {match.deck_count} deck · {match.player_count} players · {match.max_rounds} rounds
             </p>
           </div>
+
+          {isTeam && mvp && (
+            <div className="text-center mb-3">
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-200/10 border border-amber-300/40">
+                <Avatar avatarId={mvp.member.avatar_id} playerName={mvp.member.name} size="xs" />
+                <span className="text-amber-200 font-medium text-xs">
+                  🏅 MVP: {mvp.member.name}
+                </span>
+              </div>
+              <p className="text-emerald-200/50 text-[10px] mt-1">
+                {Math.round(mvp.bidAccuracy * 100)}% bid accuracy · {Math.round(mvp.contribution * 100)}% contribution
+              </p>
+            </div>
+          )}
 
           <div className="bg-emerald-950/30 border border-emerald-900/60 rounded-2xl p-4 mb-4">
             <p className="text-xs uppercase tracking-widest text-emerald-200/60 text-center mb-3">Final ranking</p>
@@ -890,6 +905,62 @@ function MatchDetail({ match, onBack, onClose }) {
       </div>
     </div>
   );
+}
+
+function computeMVPFromMatch(match) {
+  if (match.mode !== 'team') return null;
+  const rounds = (match.round_breakdown || []).filter((r) => r.completed);
+  if (rounds.length === 0) return null;
+
+  // Per-team bid accuracy
+  const teamBidStats = {};
+  for (const r of rounds) {
+    const bids = r.bids || {};      // team_id -> bid (team mode)
+    const tw = r.tricks_won || {};  // team_id -> tricks won (team mode)
+    for (const tId of Object.keys(bids)) {
+      if (!teamBidStats[tId]) teamBidStats[tId] = { correct: 0, total: 0 };
+      teamBidStats[tId].total += 1;
+      if ((bids[tId] ?? 0) === (tw[tId] ?? 0)) teamBidStats[tId].correct += 1;
+    }
+  }
+
+  // Per-player and per-team tricks
+  const playerTricks = {};
+  const teamTricks = {};
+  for (const r of rounds) {
+    for (const [pid, n] of Object.entries(r.player_tricks_won || {})) {
+      playerTricks[pid] = (playerTricks[pid] ?? 0) + (n ?? 0);
+    }
+    for (const [tid, n] of Object.entries(r.tricks_won || {})) {
+      teamTricks[tid] = (teamTricks[tid] ?? 0) + (n ?? 0);
+    }
+  }
+
+  // Old matches may not have player_tricks_won — skip if missing
+  if (Object.keys(playerTricks).length === 0) return null;
+
+  // Find best MVP across team members
+  const teamMembers = (match.team_snapshot || []).flatMap((t) =>
+    (t.members || []).map((m) => ({ ...m, team_id: t.team_id }))
+  );
+
+  let mvp = null;
+  let bestScore = -Infinity;
+  for (const m of teamMembers) {
+    const tId = m.team_id;
+    if (!tId) continue;
+    const stats = teamBidStats[tId];
+    const bidAccuracy = stats && stats.total > 0 ? stats.correct / stats.total : 0;
+    const tTotal = teamTricks[tId] ?? 0;
+    const myTricks = playerTricks[m.player_id] ?? 0;
+    const contribution = tTotal > 0 ? myTricks / tTotal : 0;
+    const score = 0.6 * bidAccuracy + 0.4 * contribution;
+    if (score > bestScore) {
+      bestScore = score;
+      mvp = { member: m, bidAccuracy, contribution, score };
+    }
+  }
+  return mvp;
 }
 
 function buildRanking(match) {

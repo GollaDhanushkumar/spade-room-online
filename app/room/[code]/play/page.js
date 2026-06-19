@@ -755,12 +755,14 @@ async function handleLockIndivBid() {
         }
       }
 
-      const round_breakdown = allRounds.map((r) => ({
+const round_breakdown = allRounds.map((r) => ({
         round_num: r.round_num,
         completed: !!r.completed_at,
         bids: isTeamMode ? (r.team_bids || {}) : (r.bids || {}),
         tricks_won: isTeamMode ? (r.team_tricks_won || {}) : (r.tricks_won || {}),
         scores: isTeamMode ? (r.team_scores || {}) : (r.scores || {}),
+        // For team mode: also store individual tricks_won so MVP can be computed in match detail
+        player_tricks_won: r.tricks_won || {},
       }));
 
       const entries = Object.entries(final_scores);
@@ -1712,6 +1714,7 @@ function GameOverScreen({
   const isTie = winners.length > 1;
   const winner = winners[0]; // for color fallback
   const completedRounds = allRounds.filter((r) => r.completed_at);
+  const mvp = computeMVP(allRounds, seatedPlayers, isTeamMode);
 
   return (
    <main className="min-h-screen text-emerald-50 px-5 py-7 relative overflow-hidden"
@@ -1763,6 +1766,20 @@ function GameOverScreen({
             </>
           )}
         </div>
+
+       {isTeamMode && mvp && (
+          <div className="text-center mb-4">
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-amber-200/10 border border-amber-300/40">
+              <Avatar avatarId={mvp.seat.avatar_id} playerName={mvp.seat.name} size="xs" />
+              <span className="text-amber-200 font-medium text-sm">
+                🏅 MVP: {mvp.seat.name}
+              </span>
+            </div>
+            <p className="text-emerald-200/50 text-[11px] mt-1.5">
+              {Math.round(mvp.bidAccuracy * 100)}% bid accuracy · {Math.round(mvp.contribution * 100)}% contribution
+            </p>
+          </div>
+        )}
 
         <div className="bg-emerald-950/30 border border-emerald-900/60 rounded-2xl p-5 mb-4">
           <p className="text-xs uppercase tracking-widest text-emerald-200/60 text-center mb-4">Final ranking</p>
@@ -2149,6 +2166,58 @@ function PlayerSeat({ seat, isMe, isTurn, isWinningSeat, cardCount, teamColor })
       `}</style>
     </div>
   );
+}
+
+// ──────────────────────────────────────────────────────────
+// MVP — team mode only. Formula: 60% team bid accuracy + 40% individual contribution
+// ──────────────────────────────────────────────────────────
+function computeMVP(allRounds, seatedPlayers, isTeamMode) {
+  if (!isTeamMode) return null;
+  const completed = (allRounds || []).filter((r) => r.completed_at);
+  if (completed.length === 0) return null;
+
+  // Per-team bid accuracy: (rounds bid exactly right) / (total rounds)
+  const teamBidStats = {};
+  for (const r of completed) {
+    const tb = r.team_bids || {};
+    const tw = r.team_tricks_won || {};
+    for (const tId of Object.keys(tb)) {
+      if (!teamBidStats[tId]) teamBidStats[tId] = { correct: 0, total: 0 };
+      teamBidStats[tId].total += 1;
+      if ((tb[tId] ?? 0) === (tw[tId] ?? 0)) teamBidStats[tId].correct += 1;
+    }
+  }
+
+  // Per-player and per-team tricks across all rounds
+  const playerTricks = {};
+  const teamTricks = {};
+  for (const r of completed) {
+    for (const [pid, n] of Object.entries(r.tricks_won || {})) {
+      playerTricks[pid] = (playerTricks[pid] ?? 0) + (n ?? 0);
+    }
+    for (const [tid, n] of Object.entries(r.team_tricks_won || {})) {
+      teamTricks[tid] = (teamTricks[tid] ?? 0) + (n ?? 0);
+    }
+  }
+
+  // Score each player; highest wins MVP
+  let mvp = null;
+  let bestScore = -Infinity;
+  for (const seat of seatedPlayers) {
+    const tId = seat.team_id;
+    if (!tId) continue;
+    const stats = teamBidStats[tId];
+    const bidAccuracy = stats && stats.total > 0 ? stats.correct / stats.total : 0;
+    const tTotal = teamTricks[tId] ?? 0;
+    const myTricks = playerTricks[seat.player_id] ?? 0;
+    const contribution = tTotal > 0 ? myTricks / tTotal : 0;
+    const score = 0.6 * bidAccuracy + 0.4 * contribution;
+    if (score > bestScore) {
+      bestScore = score;
+      mvp = { seat, bidAccuracy, contribution, score };
+    }
+  }
+  return mvp;
 }
 
 function computeTeamTotals(allRounds) {
