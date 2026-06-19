@@ -318,8 +318,8 @@ export default function RoomPage({ params }) {
     notifyDhanush(
       `${hostPlayer?.name || 'Someone'} started a match in room ${code} (${activePlayers.length} players, ${mode === 'team' ? 'teams' : 'individual'})`,
       {
-        title: '🎴 New match starting',
-        tags: 'game_die',
+        title: 'New match starting',
+        tags: 'game_die,spades',
         priority: 'high',
       }
     );
