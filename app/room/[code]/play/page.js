@@ -1344,7 +1344,7 @@ const round_breakdown = allRounds.map((r) => ({
         {!iAmSpectator && (
           <button
             onClick={() => chat.setIsOpen(true)}
-            className="fixed top-3 right-16 z-30 w-11 h-11 rounded-full bg-[#0f1d18] border border-emerald-900 shadow-lg hover:bg-[#14271f] hover:border-amber-300/40 transition flex items-center justify-center text-lg relative"
+            className="fixed top-16 right-3 z-30 w-11 h-11 rounded-full bg-[#0f1d18] border border-emerald-900 shadow-lg hover:bg-[#14271f] hover:border-amber-300/40 transition flex items-center justify-center text-lg relative"
             title="Open chat"
             aria-label="Open chat"
           >
@@ -1596,7 +1596,7 @@ const round_breakdown = allRounds.map((r) => ({
 {!iAmSpectator && (
   <button
     onClick={() => chat.setIsOpen(true)}
-    className="fixed top-3 right-16 z-30 w-11 h-11 rounded-full bg-[#0f1d18] border border-emerald-900 shadow-lg hover:bg-[#14271f] hover:border-amber-300/40 transition flex items-center justify-center text-lg relative"
+    className="fixed top-16 right-3 z-30 w-11 h-11 rounded-full bg-[#0f1d18] border border-emerald-900 shadow-lg hover:bg-[#14271f] hover:border-amber-300/40 transition flex items-center justify-center text-lg relative"
     title="Open chat"
     aria-label="Open chat"
   >
