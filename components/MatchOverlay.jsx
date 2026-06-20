@@ -9,6 +9,8 @@ export default function MatchOverlay({
   code, game, seats, allRounds, round,
   isTeamMode, teamOrder, teamsByTeam, seatedPlayers,
   hostId, mePlayerId,
+  chat,
+  iAmSpectator,
 }) {
   const [showScoreboard, setShowScoreboard] = useState(false);
   const [showSeating, setShowSeating] = useState(false);
@@ -18,7 +20,7 @@ export default function MatchOverlay({
 
   return (
     <>
-      {/* Floating buttons — top-right, fixed */}
+      {/* Floating buttons — top-right, fixed, vertical stack */}
       <div className="fixed top-3 right-3 z-30 flex flex-col gap-2">
         <button
           onClick={() => setShowScoreboard(true)}
@@ -36,6 +38,21 @@ export default function MatchOverlay({
         >
           🪑
         </button>
+        {chat && !iAmSpectator && (
+          <button
+            onClick={() => chat.setIsOpen(true)}
+            className="w-11 h-11 rounded-full bg-[#0f1d18] border border-emerald-900 shadow-lg hover:bg-[#14271f] hover:border-amber-300/40 transition flex items-center justify-center text-lg relative"
+            title="Chat"
+            aria-label="Open chat"
+          >
+            💬
+            {chat.unreadCount > 0 && (
+              <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-amber-300 text-[#07100c] text-[10px] font-bold flex items-center justify-center">
+                {chat.unreadCount > 9 ? '9+' : chat.unreadCount}
+              </span>
+            )}
+          </button>
+        )}
       </div>
 
       {showScoreboard && (

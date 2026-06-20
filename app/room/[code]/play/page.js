@@ -882,6 +882,8 @@ const round_breakdown = allRounds.map((r) => ({
     code, game, seats, allRounds, round,
     isTeamMode, teamOrder, teamsByTeam, seatedPlayers,
     hostId, mePlayerId: me?.playerId,
+    chat,
+    iAmSpectator,
   };
 
   // Play victory fanfare when the match ends and I won
@@ -1059,21 +1061,6 @@ const round_breakdown = allRounds.map((r) => ({
     aria-label="Tricks won this round"
   >
     🃏
-  </button>
-)}
-{!iAmSpectator && (
-  <button
-    onClick={() => chat.setIsOpen(true)}
-    className="fixed top-3 right-16 z-30 w-11 h-11 rounded-full bg-[#0f1d18] border border-emerald-900 shadow-lg hover:bg-[#14271f] hover:border-amber-300/40 transition flex items-center justify-center text-lg relative"
-    title="Open chat"
-    aria-label="Open chat"
-  >
-    💬
-    {chat.unreadCount > 0 && (
-      <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-amber-300 text-[#07100c] text-[10px] font-bold flex items-center justify-center">
-        {chat.unreadCount > 9 ? '9+' : chat.unreadCount}
-      </span>
-    )}
   </button>
 )}
 <VoicePanel
@@ -1341,21 +1328,6 @@ const round_breakdown = allRounds.map((r) => ({
   mePlayerId={me?.playerId}
   className="top-3 left-16"
 />
-        {!iAmSpectator && (
-          <button
-            onClick={() => chat.setIsOpen(true)}
-           className="fixed top-16 right-3 z-40 w-11 h-11 rounded-full bg-[#0f1d18] border border-emerald-900 shadow-lg hover:bg-[#14271f] hover:border-amber-300/40 transition flex items-center justify-center text-lg"
-            title="Open chat"
-            aria-label="Open chat"
-          >
-            💬
-            {chat.unreadCount > 0 && (
-              <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-amber-300 text-[#07100c] text-[10px] font-bold flex items-center justify-center">
-                {chat.unreadCount > 9 ? '9+' : chat.unreadCount}
-              </span>
-            )}
-          </button>
-        )}
         {iAmSpectator && <SpectatorBadge className="fixed top-3 right-3 z-30" />}
         <div className={`max-w-md mx-auto ${iAmSpectator ? 'pt-12' : ''}`}>
           <div className="text-center mb-5">
@@ -1591,21 +1563,6 @@ const round_breakdown = allRounds.map((r) => ({
     aria-label="Tricks won this round"
   >
     🃏
-  </button>
-)}
-{!iAmSpectator && (
-  <button
-    onClick={() => chat.setIsOpen(true)}
-    className="fixed top-16 right-3 z-40 w-11 h-11 rounded-full bg-[#0f1d18] border border-emerald-900 shadow-lg hover:bg-[#14271f] hover:border-amber-300/40 transition flex items-center justify-center text-lg"
-    title="Open chat"
-    aria-label="Open chat"
-  >
-    💬
-    {chat.unreadCount > 0 && (
-      <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-amber-300 text-[#07100c] text-[10px] font-bold flex items-center justify-center">
-        {chat.unreadCount > 9 ? '9+' : chat.unreadCount}
-      </span>
-    )}
   </button>
 )}
 <VoicePanel
