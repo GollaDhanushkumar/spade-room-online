@@ -465,24 +465,22 @@ async function handleLockIndivBid() {
 
     const card = theirHand[pickIdx];
     const newHand = [...theirHand.slice(0, pickIdx), ...theirHand.slice(pickIdx + 1)];
-    const newTrickEntry = { player_id: playerId, seat_index: targetSeat.seat_index, card };
-    const newCurrentTrick = [...currentTrick, newTrickEntry];
     const nextPlayerSeat = (targetSeat.seat_index + 1) % N;
 
-    await supabase.from('hands')
-      .update({ cards: newHand })
-      .eq('game_id', game.id)
-      .eq('player_id', playerId)
-      .eq('round_num', game.current_round);
+    // Use the atomic RPC to avoid races with other players
+    const { error } = await supabase.rpc('play_card', {
+      p_game_id: game.id,
+      p_round_num: game.current_round,
+      p_player_id: playerId,
+      p_seat_index: targetSeat.seat_index,
+      p_card: card,
+      p_next_player_seat: nextPlayerSeat,
+      p_new_hand: newHand,
+    });
 
-    await supabase.from('rounds')
-      .update({
-        current_trick: newCurrentTrick,
-        current_player_seat_index: nextPlayerSeat,
-      })
-      .eq('game_id', game.id)
-      .eq('round_num', game.current_round);
-
+    if (error) {
+      console.error('Skip-turn rejected by server:', error.message);
+    }
     setSkipping(false);
   }
 
@@ -490,43 +488,66 @@ async function handleLockIndivBid() {
     if (!itsMyTurn || playing) return;
     if (!legalIndices.has(handIdx)) return;
     setPlaying(true);
-    // sounds.play('cardPlay');
 
     const card = myHand[handIdx];
     const newHand = [...myHand.slice(0, handIdx), ...myHand.slice(handIdx + 1)];
-    const newTrickEntry = { player_id: me.playerId, seat_index: mySeatIdx, card };
-    const newCurrentTrick = [...currentTrick, newTrickEntry];
     const nextPlayerSeat = (mySeatIdx + 1) % N;
 
     // Optimistic UI — update locally first so card lands instantly
+    const newTrickEntry = { player_id: me.playerId, seat_index: mySeatIdx, card };
     setMyHand(newHand);
     setRound((prev) => prev ? {
       ...prev,
-      current_trick: newCurrentTrick,
+      current_trick: [...(prev.current_trick || []), newTrickEntry],
       current_player_seat_index: nextPlayerSeat,
     } : prev);
 
-    // Fire both DB writes in parallel, don't block the UI
-    Promise.all([
-      supabase.from('hands')
-        .update({ cards: newHand })
-        .eq('game_id', game.id).eq('player_id', me.playerId)
-        .eq('round_num', game.current_round),
-      supabase.from('rounds')
-        .update({ current_trick: newCurrentTrick, current_player_seat_index: nextPlayerSeat })
-        .eq('game_id', game.id).eq('round_num', game.current_round),
-    ]).then(() => {
-      setPlaying(false);
-    }).catch((err) => {
-      console.error('Failed to sync card play:', err);
-      setPlaying(false);
+    // ATOMIC server-side write — appends to trick safely, can't race with other players
+    const { error } = await supabase.rpc('play_card', {
+      p_game_id: game.id,
+      p_round_num: game.current_round,
+      p_player_id: me.playerId,
+      p_seat_index: mySeatIdx,
+      p_card: card,
+      p_next_player_seat: nextPlayerSeat,
+      p_new_hand: newHand,
     });
+
+    if (error) {
+      console.error('Card play rejected by server (race or stale state):', error.message);
+      // Re-sync from DB so the user sees the correct state
+      const [{ data: freshRound }, { data: freshHand }] = await Promise.all([
+        supabase.from('rounds').select('*')
+          .eq('game_id', game.id).eq('round_num', game.current_round).maybeSingle(),
+        supabase.from('hands').select('cards')
+          .eq('game_id', game.id).eq('player_id', me.playerId)
+          .eq('round_num', game.current_round).maybeSingle(),
+      ]);
+      if (freshRound) setRound(freshRound);
+      if (freshHand) setMyHand(freshHand.cards || []);
+    }
+    setPlaying(false);
   }
   useEffect(() => {
     async function resolveTrickIfComplete() {
       if (!round || !game || !iAmHost) return;
       if (currentTrick.length !== N || N === 0) return;
       if (revealedWinner) return;
+
+      // SAFETY: if the last trick in history is identical to currentTrick,
+      // we've already counted it — skip to prevent double-counting tricks_won
+      const lastHistoryTrick = round.trick_history?.[round.trick_history.length - 1];
+      if (lastHistoryTrick && lastHistoryTrick.cards?.length === currentTrick.length) {
+        const isDuplicate = lastHistoryTrick.cards.every((c, i) =>
+          c.player_id === currentTrick[i].player_id &&
+          c.card?.value === currentTrick[i].card?.value &&
+          c.card?.suit === currentTrick[i].card?.suit
+        );
+        if (isDuplicate) {
+          console.warn('Skipping duplicate trick resolution (already in history)');
+          return;
+        }
+      }
 
       const winner = determineTrickWinner(currentTrick);
       if (!winner) return;
