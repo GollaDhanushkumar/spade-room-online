@@ -33,6 +33,7 @@ import { useRoomTheme } from '@/lib/useRoomTheme';
 import CardBack from '@/components/CardBack';
 import { useEmojiReactions, EmojiPicker, FloatingEmoji } from '@/components/EmojiBurst';
 import { useChat, ChatPanel } from '@/components/ChatPanel';
+import { useBackButtonExit } from '@/lib/useBackButtonExit';
 
 // Detect mobile for responsive table sizing
 function useIsMobile() {
@@ -99,6 +100,7 @@ export default function PlayPage({ params }) {
   const stalePlayerIds = useStalePlayers(code);
   const sounds = useSounds();
   useRoomTheme(room);
+  useBackButtonExit({ enabled: !loading });
 
   const otherPlayerIds = seats
     .filter((s) => s.player_id !== me?.playerId)

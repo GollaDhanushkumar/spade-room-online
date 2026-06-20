@@ -24,6 +24,7 @@ import { useVoiceChat } from '@/lib/useVoiceChat';
 import InstallAppButton from '@/components/InstallAppButton';
 import { notifyDhanush } from '@/lib/notify';
 import { useChat, ChatPanel } from '@/components/ChatPanel';
+import { useBackButtonExit } from '@/lib/useBackButtonExit';
 import { useEmojiReactions, EmojiPicker, FloatingEmoji } from '@/components/EmojiBurst';
 
 
@@ -55,6 +56,7 @@ export default function RoomPage({ params }) {
   usePresence(me?.playerId);
   useHostPromotion(code, me?.playerId);
   useRoomTheme(room);
+  useBackButtonExit({ enabled: !loading && !needsRejoin });
 
   const otherPlayerIds = players
     .filter((p) => p.id !== me?.playerId)

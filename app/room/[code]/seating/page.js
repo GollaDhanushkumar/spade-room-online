@@ -20,6 +20,7 @@ import VoicePanel from '@/components/VoicePanel';
 import SoundToggle from '@/components/SoundToggle';
 import { useSounds } from '@/lib/useSounds';
 import { useVoiceChat } from '@/lib/useVoiceChat';
+import { useBackButtonExit } from '@/lib/useBackButtonExit';
 import CardBack from '@/components/CardBack';
 
 export default function SeatingPage({ params }) {
@@ -50,6 +51,7 @@ export default function SeatingPage({ params }) {
   usePresence(me?.playerId);
   useHostPromotion(code, me?.playerId);
   useRoomTheme(room);
+  useBackButtonExit({ enabled: !loading });
   const sounds = useSounds();
 
   const otherPlayerIds = seats
