@@ -1059,6 +1059,21 @@ const round_breakdown = allRounds.map((r) => ({
     🃏
   </button>
 )}
+{!iAmSpectator && (
+  <button
+    onClick={() => chat.setIsOpen(true)}
+    className="fixed top-3 right-16 z-30 w-11 h-11 rounded-full bg-[#0f1d18] border border-emerald-900 shadow-lg hover:bg-[#14271f] hover:border-amber-300/40 transition flex items-center justify-center text-lg relative"
+    title="Open chat"
+    aria-label="Open chat"
+  >
+    💬
+    {chat.unreadCount > 0 && (
+      <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-amber-300 text-[#07100c] text-[10px] font-bold flex items-center justify-center">
+        {chat.unreadCount > 9 ? '9+' : chat.unreadCount}
+      </span>
+    )}
+  </button>
+)}
 <VoicePanel
   voice={voice}
   players={seatedPlayers.map((s) => ({ player_id: s.player_id, name: s.name, avatar_id: s.avatar_id }))}
@@ -1286,6 +1301,18 @@ const round_breakdown = allRounds.map((r) => ({
           roundNum={game?.current_round || 1}
         />
       )}
+      <ChatPanel
+        isOpen={chat.isOpen}
+        onClose={() => chat.setIsOpen(false)}
+        messages={chat.messages}
+        sendMessage={chat.sendMessage}
+        myPlayerId={me?.playerId}
+        roomPlayers={seatedPlayers.map((s) => ({
+          player_id: s.player_id,
+          name: s.name,
+          avatar_id: s.avatar_id,
+        }))}
+      />
       </>
     );
   }
@@ -1312,6 +1339,21 @@ const round_breakdown = allRounds.map((r) => ({
   mePlayerId={me?.playerId}
   className="top-3 left-16"
 />
+        {!iAmSpectator && (
+          <button
+            onClick={() => chat.setIsOpen(true)}
+            className="fixed top-3 right-16 z-30 w-11 h-11 rounded-full bg-[#0f1d18] border border-emerald-900 shadow-lg hover:bg-[#14271f] hover:border-amber-300/40 transition flex items-center justify-center text-lg relative"
+            title="Open chat"
+            aria-label="Open chat"
+          >
+            💬
+            {chat.unreadCount > 0 && (
+              <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-amber-300 text-[#07100c] text-[10px] font-bold flex items-center justify-center">
+                {chat.unreadCount > 9 ? '9+' : chat.unreadCount}
+              </span>
+            )}
+          </button>
+        )}
         {iAmSpectator && <SpectatorBadge className="fixed top-3 right-3 z-30" />}
         <div className={`max-w-md mx-auto ${iAmSpectator ? 'pt-12' : ''}`}>
           <div className="text-center mb-5">
@@ -1400,7 +1442,7 @@ const round_breakdown = allRounds.map((r) => ({
           )}
        </div>
       </main>
-      <MatchOverlay {...overlayProps} />
+<MatchOverlay {...overlayProps} />
       {showTricksWon && (
         <TricksWonModal
           onClose={() => setShowTricksWon(false)}
@@ -1410,6 +1452,18 @@ const round_breakdown = allRounds.map((r) => ({
           roundNum={game?.current_round || 1}
         />
       )}
+      <ChatPanel
+        isOpen={chat.isOpen}
+        onClose={() => chat.setIsOpen(false)}
+        messages={chat.messages}
+        sendMessage={chat.sendMessage}
+        myPlayerId={me?.playerId}
+        roomPlayers={seatedPlayers.map((s) => ({
+          player_id: s.player_id,
+          name: s.name,
+          avatar_id: s.avatar_id,
+        }))}
+      />
       </>
     );
   }

@@ -23,6 +23,7 @@ import VoicePanel from '@/components/VoicePanel';
 import { useVoiceChat } from '@/lib/useVoiceChat';
 import InstallAppButton from '@/components/InstallAppButton';
 import { notifyDhanush } from '@/lib/notify';
+import { useChat, ChatPanel } from '@/components/ChatPanel';
 import { useEmojiReactions, EmojiPicker, FloatingEmoji } from '@/components/EmojiBurst';
 
 
@@ -63,8 +64,14 @@ export default function RoomPage({ params }) {
     myPlayerId: me?.playerId,
     otherPlayerIds,
   });
-  const { activeReactions, sendReaction } = useEmojiReactions({ roomCode: code, myPlayerId: me?.playerId });
+const { activeReactions, sendReaction } = useEmojiReactions({ roomCode: code, myPlayerId: me?.playerId });
   const [emojiTarget, setEmojiTarget] = useState(null); // { playerId, name, rect }
+  const chat = useChat({
+    roomCode: code,
+    myPlayerId: me?.playerId,
+    myName: me?.name,
+    myAvatarId: me?.avatarId,
+  });
 
   useEffect(() => {
     const saved = localStorage.getItem(`spade-room-${code}`);
@@ -392,6 +399,21 @@ export default function RoomPage({ params }) {
         )}
 
 <button
+          onClick={() => chat.setIsOpen(true)}
+          className="flex items-center gap-1.5 px-3 h-11 rounded-full bg-[#0f1d18] border border-emerald-900 shadow-lg hover:bg-[#14271f] hover:border-amber-300/40 transition relative"
+          title="Open chat"
+          aria-label="Open chat"
+        >
+          <span className="text-lg">💬</span>
+          <span className="text-xs text-emerald-200/80 font-medium">Chat</span>
+          {chat.unreadCount > 0 && (
+            <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-amber-300 text-[#07100c] text-[10px] font-bold flex items-center justify-center">
+              {chat.unreadCount > 9 ? '9+' : chat.unreadCount}
+            </span>
+          )}
+        </button>
+
+        <button
           onClick={() => setShowHistory(true)}
           className="flex items-center gap-1.5 px-3 h-11 rounded-full bg-[#0f1d18] border border-emerald-900 shadow-lg hover:bg-[#14271f] hover:border-amber-300/40 transition"
           title="Match history & rankings"
@@ -581,6 +603,21 @@ export default function RoomPage({ params }) {
           onClose={() => setEmojiTarget(null)}
         />
       )}
+
+      <ChatPanel
+        isOpen={chat.isOpen}
+        onClose={() => chat.setIsOpen(false)}
+        messages={chat.messages}
+        sendMessage={chat.sendMessage}
+        myPlayerId={me?.playerId}
+        roomPlayers={players
+          .filter((p) => !p.is_spectator)
+          .map((p) => ({
+            player_id: p.id,
+            name: p.name,
+            avatar_id: p.avatar_id,
+          }))}
+      />
 
       {/* Settings Modal */}
       {showSettings && iAmHost && (

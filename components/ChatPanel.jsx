@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import Avatar from './Avatar';
+import { notifyDhanushMention } from '@/lib/notify';
 
 const MESSAGE_LIMIT = 50;
 
@@ -36,19 +37,31 @@ export function useChat({ roomCode, myPlayerId, myName, myAvatarId }) {
     }
     loadMessages();
 
-    const channel = supabase
+const channel = supabase
       .channel(`chat-${roomCode}`)
       .on('postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `room_code=eq.${roomCode}` },
         (payload) => {
           if (cancelled) return;
+          const m = payload.new;
           setMessages((prev) => {
-            if (prev.some((m) => m.id === payload.new.id)) return prev;
-            const next = [...prev, payload.new].slice(-MESSAGE_LIMIT);
+            if (prev.some((x) => x.id === m.id)) return prev;
+            const next = [...prev, m].slice(-MESSAGE_LIMIT);
             return next;
           });
-          if (!isOpenRef.current && payload.new.player_id !== myPlayerId) {
+          if (!isOpenRef.current && m.player_id !== myPlayerId) {
             setUnreadCount((n) => n + 1);
+          }
+          // 🔔 ntfy ping if Dhanush was mentioned (only Dhanush will have the env var set)
+          const lowerName = (myName || '').toLowerCase().trim();
+          const iAmDhanush = lowerName === 'dhanush';
+          if (iAmDhanush && (m.mentioned_player_ids || []).includes(myPlayerId)) {
+            notifyDhanushMention({
+              fromName: m.player_name,
+              message: m.message,
+              roomCode,
+              iAmDhanush: false, // sender is someone else, we already checked
+            });
           }
         }
       )
