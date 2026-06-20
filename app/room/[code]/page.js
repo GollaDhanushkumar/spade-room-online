@@ -452,7 +452,10 @@ export default function RoomPage({ params }) {
                           }}
                         />
                       )}
-                      <FloatingEmoji emoji={activeReactions[p.id]?.emoji} />
+                      <FloatingEmoji
+                        emoji={activeReactions[p.id]?.emoji}
+                        fromName={activeReactions[p.id]?.fromName}
+                      />
                     </button>
                     <span className="font-medium truncate">
                       {p.name}
@@ -574,7 +577,7 @@ export default function RoomPage({ params }) {
           targetPlayerId={emojiTarget.playerId}
           targetName={emojiTarget.name}
           anchorRect={emojiTarget.rect}
-          onPick={(emoji) => sendReaction(emojiTarget.playerId, emoji)}
+          onPick={(emoji) => sendReaction(emojiTarget.playerId, emoji, me?.name)}
           onClose={() => setEmojiTarget(null)}
         />
       )}

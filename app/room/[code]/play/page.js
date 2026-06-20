@@ -1667,12 +1667,12 @@ const round_breakdown = allRounds.map((r) => ({
           roundNum={game?.current_round || 1}
         />
       )}
-      {emojiTarget && (
+     {emojiTarget && (
         <EmojiPicker
           targetPlayerId={emojiTarget.playerId}
           targetName={emojiTarget.name}
           anchorRect={emojiTarget.rect}
-          onPick={(emoji) => sendReaction(emojiTarget.playerId, emoji)}
+          onPick={(emoji) => sendReaction(emojiTarget.playerId, emoji, mySeat?.name || me?.name)}
           onClose={() => setEmojiTarget(null)}
         />
       )}
@@ -2080,6 +2080,7 @@ function PlayTable({ seats, allHands, mySeat, currentTrick, currentPlayerSeatIdx
                 ...seat,
                 _talking: talkingPlayers?.has(seat.player_id) ?? false,
                 _reaction: reactions?.[seat.player_id]?.emoji,
+                _reactionFrom: reactions?.[seat.player_id]?.fromName,
                 _onReact: onReact,
               }}
               isMe={isMe}
@@ -2169,7 +2170,7 @@ function PlayerSeat({ seat, isMe, isTurn, isWinningSeat, cardCount, teamColor })
               }}
             />
           )}
-          {seat._reaction && <FloatingEmoji emoji={seat._reaction} />}
+          {seat._reaction && <FloatingEmoji emoji={seat._reaction} fromName={seat._reactionFrom} />}
         </button>
         <div
           className="px-2 py-0.5 rounded-md text-[11px] font-medium whitespace-nowrap shadow-md"

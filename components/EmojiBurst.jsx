@@ -32,10 +32,10 @@ export function useEmojiReactions({ roomCode, myPlayerId }) {
     const channel = supabase
       .channel(`emoji-${roomCode}`)
       .on('broadcast', { event: 'reaction' }, ({ payload }) => {
-        const { targetId, emoji } = payload || {};
+        const { targetId, emoji, fromId, fromName } = payload || {};
         if (!targetId || !emoji) return;
         const ts = Date.now();
-        setActiveReactions((prev) => ({ ...prev, [targetId]: { emoji, ts } }));
+        setActiveReactions((prev) => ({ ...prev, [targetId]: { emoji, ts, fromId, fromName } }));
         scheduleClear(targetId, ts);
       })
       .subscribe();
@@ -43,7 +43,7 @@ export function useEmojiReactions({ roomCode, myPlayerId }) {
     return () => { supabase.removeChannel(channel); };
   }, [roomCode, scheduleClear]);
 
-  const sendReaction = useCallback((targetId, emoji) => {
+  const sendReaction = useCallback((targetId, emoji, fromName) => {
     const now = Date.now();
     if (now - lastSentRef.current < 3000) return false; // cooldown
     lastSentRef.current = now;
@@ -51,12 +51,12 @@ export function useEmojiReactions({ roomCode, myPlayerId }) {
       channelRef.current.send({
         type: 'broadcast',
         event: 'reaction',
-        payload: { targetId, emoji, fromId: myPlayerId },
+        payload: { targetId, emoji, fromId: myPlayerId, fromName },
       });
     }
     // Also show locally (broadcast may not echo back to sender)
     const ts = Date.now();
-    setActiveReactions((prev) => ({ ...prev, [targetId]: { emoji, ts } }));
+    setActiveReactions((prev) => ({ ...prev, [targetId]: { emoji, ts, fromId: myPlayerId, fromName } }));
     scheduleClear(targetId, ts);
     return true;
   }, [myPlayerId, scheduleClear]);
@@ -114,23 +114,36 @@ export function EmojiPicker({ targetPlayerId, targetName, onPick, onClose, ancho
     </>
   );
 }
-
-// Floating emoji that appears above an avatar
-export function FloatingEmoji({ emoji }) {
+// Floating emoji that appears above an avatar, with sender name below
+export function FloatingEmoji({ emoji, fromName }) {
   if (!emoji) return null;
   return (
     <div
-      className="absolute pointer-events-none"
+      className="absolute pointer-events-none flex flex-col items-center"
       style={{
         left: '50%',
         top: -8,
         transform: 'translate(-50%, -100%)',
         zIndex: 70,
         animation: 'emojiFloatPop 2s ease-out forwards',
-        fontSize: 32,
       }}
     >
-      {emoji}
+      <div style={{ fontSize: 32, lineHeight: 1 }}>{emoji}</div>
+      {fromName && (
+        <div
+          className="mt-0.5 px-1.5 py-0.5 rounded text-[9px] font-medium whitespace-nowrap"
+          style={{
+            background: 'rgba(7, 16, 12, 0.92)',
+            color: '#f5d989',
+            border: '1px solid rgba(245, 217, 137, 0.4)',
+            maxWidth: 100,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          }}
+        >
+          from {fromName}
+        </div>
+      )}
       <style jsx>{`
         @keyframes emojiFloatPop {
           0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.4); }
