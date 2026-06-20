@@ -435,6 +435,7 @@ export default function HomePage() {
                   onSelect={(id) => setSelectedAvatarId(id)}
                   takenIds={takenAvatars}
                   compact
+                  playerName={name}
                 />
               </div>
             )}
