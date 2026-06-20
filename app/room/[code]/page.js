@@ -376,7 +376,7 @@ const { activeReactions, sendReaction } = useEmojiReactions({ roomCode: code, my
   const maxRoundsAvailable = playerCount >= 2 ? maxRoundsFor(playerCount, deckCount) : 13;
 
   return (
-    <main className="min-h-screen text-emerald-50 px-6 py-10 relative"
+    <main className="min-h-screen text-emerald-50 px-6 pb-10 pt-20 relative"
       style={{ background: `linear-gradient(to bottom, var(--theme-bg-from, #0a1410), var(--theme-bg-to, #0f3d2c))` }}>
         <ThemeAnimation room={room} />
        <VoicePanel
