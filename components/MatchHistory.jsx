@@ -438,13 +438,21 @@ function PlayerRankingRow({ player, rank, editMode, onHideClick }) {
       </div>
 
       {expanded && !editMode && (
-        <div className="mt-3 pt-3 border-t border-emerald-900/40 grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
-          <StatLine label="Total points" value={`${player.totalPoints > 0 ? '+' : ''}${player.totalPoints}`} color={player.totalPoints > 0 ? '#86efac' : '#fca5a5'} />
-          <StatLine label="Avg / match" value={`${avgScore > 0 ? '+' : ''}${avgScore}`} color={avgScore > 0 ? '#86efac' : '#fca5a5'} />
-          <StatLine label="Best match" value={`${player.bestMatch > 0 ? '+' : ''}${player.bestMatch}`} color="#86efac" />
-          <StatLine label="Worst match" value={`${player.worstMatch > 0 ? '+' : ''}${player.worstMatch}`} color="#fca5a5" />
-          <StatLine label="Bid accuracy" value={`${bidAccuracyPct}% (${player.correctBids}/${player.totalBids})`} color="#e5d4a8" />
-          <StatLine label="Current streak" value={streakLabel} color={streakColor} />
+        <div className="mt-3 pt-3 border-t border-emerald-900/40">
+          <div className="grid grid-cols-4 gap-2 mb-3 pb-3 border-b border-emerald-900/30">
+            <PlacementBadge emoji="🥇" count={player.firstCount} />
+            <PlacementBadge emoji="🥈" count={player.secondCount} />
+            <PlacementBadge emoji="🥉" count={player.thirdCount} />
+            <PlacementBadge emoji="🪦" label="Last" count={player.lastCount} />
+          </div>
+          <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+            <StatLine label="Total points" value={`${player.totalPoints > 0 ? '+' : ''}${player.totalPoints}`} color={player.totalPoints > 0 ? '#86efac' : '#fca5a5'} />
+            <StatLine label="Avg / match" value={`${avgScore > 0 ? '+' : ''}${avgScore}`} color={avgScore > 0 ? '#86efac' : '#fca5a5'} />
+            <StatLine label="Best match" value={`${player.bestMatch > 0 ? '+' : ''}${player.bestMatch}`} color="#86efac" />
+            <StatLine label="Worst match" value={`${player.worstMatch > 0 ? '+' : ''}${player.worstMatch}`} color="#fca5a5" />
+            <StatLine label="Bid accuracy" value={`${bidAccuracyPct}% (${player.correctBids}/${player.totalBids})`} color="#e5d4a8" />
+            <StatLine label="Current streak" value={streakLabel} color={streakColor} />
+          </div>
         </div>
       )}
     </div>
@@ -553,6 +561,18 @@ function PairRankingRow({ pair, rank }) {
   );
 }
 
+
+
+function PlacementBadge({ emoji, label, count }) {
+  return (
+    <div className="text-center bg-[#0f1d18] rounded-lg py-2">
+      <p className="text-lg leading-none mb-1">{emoji}</p>
+      <p className="text-sm font-bold font-mono text-amber-200">{count}</p>
+      {label && <p className="text-[8px] text-emerald-200/40 uppercase tracking-wider mt-0.5">{label}</p>}
+    </div>
+  );
+}
+
 function StatLine({ label, value, color }) {
   return (
     <div>
@@ -594,6 +614,27 @@ function computePlayerStats(matches) {
    const sortedScores = Object.entries(finalScores).sort((a, b) => b[1] - a[1]);
     const topScore = sortedScores[0]?.[1] ?? 0;
 
+    // Build tie-aware placement map: players with equal scores share a rank;
+    // the next distinct score skips ahead by the count of tied players (1,1,3,4...)
+    const scoreEntries = playerSnap.map((p) => ({
+      pid: p.player_id,
+      score: finalScores[p.player_id] ?? 0,
+    }));
+    scoreEntries.sort((a, b) => b.score - a.score);
+    const placementMap = {};
+    let rank = 0;
+    let prevScore = null;
+    scoreEntries.forEach((e, idx) => {
+      if (e.score !== prevScore) {
+        rank = idx + 1;
+        prevScore = e.score;
+      }
+      placementMap[e.pid] = rank;
+    });
+    const maxPlacement = scoreEntries.length > 0
+      ? Math.max(...Object.values(placementMap))
+      : 0;
+
     for (const p of playerSnap) {
       const identifier = getIdentifier(p.name, p.avatar_id);
 
@@ -607,6 +648,7 @@ function computePlayerStats(matches) {
           totalBids: 0, correctBids: 0,
           recentResults: [],
           currentStreak: 0, streakType: null,
+          firstCount: 0, secondCount: 0, thirdCount: 0, lastCount: 0,
         };
       }
       const s = statsByIdentifier[identifier];
@@ -621,6 +663,13 @@ function computePlayerStats(matches) {
       if (myScore < s.worstMatch) s.worstMatch = myScore;
       if (iWon) s.wins += 1; else s.losses += 1;
       s.recentResults.push(iWon ? 'W' : 'L');
+
+      // Placement (1st/2nd/3rd/last), tie-aware (competition ranking: ties share a place)
+      const myPlacement = placementMap[p.player_id];
+      if (myPlacement === 1) s.firstCount += 1;
+      else if (myPlacement === 2) s.secondCount += 1;
+      else if (myPlacement === 3) s.thirdCount += 1;
+      if (maxPlacement > 1 && myPlacement === maxPlacement) s.lastCount += 1;
 
       for (const r of roundBreakdown) {
         if (!r.completed) continue;
