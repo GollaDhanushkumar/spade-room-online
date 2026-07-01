@@ -522,38 +522,29 @@ function PairRankings({ matches, hiddenSet }) {
         )}
       </div>
 
-      {/* Player filter pills */}
+      {/* Player filter dropdown */}
       {allPlayers.length > 0 && (
-        <div className="mb-3">
-          <p className="text-[10px] uppercase tracking-widest text-emerald-200/40 mb-1.5">
+        <div className="mb-3 flex items-center gap-2">
+          <p className="text-[10px] uppercase tracking-widest text-emerald-200/40 flex-shrink-0">
             Filter by player
           </p>
-          <div className="flex flex-wrap gap-1.5">
+          <select
+            value={filterPlayer ?? ''}
+            onChange={(e) => setFilterPlayer(e.target.value || null)}
+            className="flex-1 px-3 py-2 rounded-xl bg-[#14271f] border border-emerald-900/60 text-emerald-200 text-xs focus:border-amber-300/60 outline-none cursor-pointer"
+          >
+            <option value="">All players</option>
             {allPlayers.map((pl) => {
-              const isActive = filterPlayer === pl.identifier;
-              // Count how many pairs this player has
               const pairCount = ranked.filter(
                 (p) => p.aIdentifier === pl.identifier || p.bIdentifier === pl.identifier
               ).length;
               return (
-                <button
-                  key={pl.identifier}
-                  onClick={() => setFilterPlayer(isActive ? null : pl.identifier)}
-                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium transition ${
-                    isActive
-                      ? 'bg-amber-300 text-[#07100c]'
-                      : 'bg-[#14271f] border border-emerald-900/60 text-emerald-200/70 hover:border-amber-300/40'
-                  }`}
-                >
-                  <Avatar avatarId={pl.avatarId} playerName={pl.name} size="xs" />
-                  <span>{pl.name}</span>
-                  <span className={`text-[10px] ${isActive ? 'text-[#07100c]/60' : 'text-emerald-200/40'}`}>
-                    {pairCount}
-                  </span>
-                </button>
+                <option key={pl.identifier} value={pl.identifier}>
+                  {pl.name} ({pairCount} {pairCount === 1 ? 'partner' : 'partners'})
+                </option>
               );
             })}
-          </div>
+          </select>
         </div>
       )}
 
