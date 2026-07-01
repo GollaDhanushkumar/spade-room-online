@@ -669,7 +669,7 @@ function computePlayerStats(matches) {
       if (myPlacement === 1) s.firstCount += 1;
       else if (myPlacement === 2) s.secondCount += 1;
       else if (myPlacement === 3) s.thirdCount += 1;
-      if (maxPlacement > 1 && myPlacement === maxPlacement) s.lastCount += 1;
+      if (maxPlacement > 3 && myPlacement === maxPlacement) s.lastCount += 1;
 
       for (const r of roundBreakdown) {
         if (!r.completed) continue;
