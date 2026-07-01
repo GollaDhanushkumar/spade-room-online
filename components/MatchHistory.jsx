@@ -463,6 +463,7 @@ function PlayerRankingRow({ player, rank, editMode, onHideClick }) {
 // Pair rankings — unique team pairings sorted by their win rate
 // ──────────────────────────────────────────────────────────
 function PairRankings({ matches, hiddenSet }) {
+  const [filterPlayer, setFilterPlayer] = useState(null);
   const teamMatches = matches.filter((m) => m.mode === 'team');
   const pairs = computePairStats(teamMatches);
 
@@ -471,7 +472,6 @@ function PairRankings({ matches, hiddenSet }) {
     !hiddenSet.has(p.aIdentifier) && !hiddenSet.has(p.bIdentifier)
   );
 
-  // Only show pairs with at least 1 match together. Sort by win rate desc, then matches desc.
   const ranked = visible
     .filter((p) => p.matchesPlayed >= 1)
     .sort((a, b) => {
@@ -479,28 +479,109 @@ function PairRankings({ matches, hiddenSet }) {
       return b.matchesPlayed - a.matchesPlayed;
     });
 
+  // Collect all unique player names from visible pairs (for filter pills)
+  const allPlayers = [];
+  const seenNames = new Set();
+  for (const p of ranked) {
+    if (!seenNames.has(p.aIdentifier)) {
+      seenNames.add(p.aIdentifier);
+      allPlayers.push({ identifier: p.aIdentifier, name: p.aName, avatarId: p.aAvatarId });
+    }
+    if (!seenNames.has(p.bIdentifier)) {
+      seenNames.add(p.bIdentifier);
+      allPlayers.push({ identifier: p.bIdentifier, name: p.bName, avatarId: p.bAvatarId });
+    }
+  }
+  allPlayers.sort((a, b) => a.name.localeCompare(b.name));
+
+  // Apply filter
+  const filtered = filterPlayer
+    ? ranked.filter((p) =>
+        p.aIdentifier === filterPlayer || p.bIdentifier === filterPlayer
+      )
+    : ranked;
+
+  // Count matches for filtered player
+  const filterPlayerMatchCount = filterPlayer
+    ? filtered.reduce((sum, p) => sum + p.matchesPlayed, 0)
+    : null;
+
   return (
     <>
       <div className="flex items-center justify-between mb-2">
         <p className="text-[10px] uppercase tracking-widest text-emerald-200/40">
           {teamMatches.length} team {teamMatches.length === 1 ? 'match' : 'matches'} · {ranked.length} unique {ranked.length === 1 ? 'pair' : 'pairs'}
         </p>
+        {filterPlayer && (
+          <button
+            onClick={() => setFilterPlayer(null)}
+            className="text-[10px] uppercase tracking-wider px-2 py-1 rounded bg-amber-300 text-[#07100c] font-bold"
+          >
+            Clear ×
+          </button>
+        )}
       </div>
 
-      {ranked.length === 0 ? (
+      {/* Player filter pills */}
+      {allPlayers.length > 0 && (
+        <div className="mb-3">
+          <p className="text-[10px] uppercase tracking-widest text-emerald-200/40 mb-1.5">
+            Filter by player
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {allPlayers.map((pl) => {
+              const isActive = filterPlayer === pl.identifier;
+              // Count how many pairs this player has
+              const pairCount = ranked.filter(
+                (p) => p.aIdentifier === pl.identifier || p.bIdentifier === pl.identifier
+              ).length;
+              return (
+                <button
+                  key={pl.identifier}
+                  onClick={() => setFilterPlayer(isActive ? null : pl.identifier)}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium transition ${
+                    isActive
+                      ? 'bg-amber-300 text-[#07100c]'
+                      : 'bg-[#14271f] border border-emerald-900/60 text-emerald-200/70 hover:border-amber-300/40'
+                  }`}
+                >
+                  <Avatar avatarId={pl.avatarId} playerName={pl.name} size="xs" />
+                  <span>{pl.name}</span>
+                  <span className={`text-[10px] ${isActive ? 'text-[#07100c]/60' : 'text-emerald-200/40'}`}>
+                    {pairCount}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Filter summary */}
+      {filterPlayer && (
+        <div className="mb-3 px-3 py-2 rounded-xl bg-amber-200/8 border border-amber-300/20">
+          <p className="text-xs text-amber-200/80">
+            Showing <span className="font-bold text-amber-200">
+              {allPlayers.find((p) => p.identifier === filterPlayer)?.name}
+            </span>'s pairs · {filtered.length} {filtered.length === 1 ? 'partner' : 'partners'}
+          </p>
+        </div>
+      )}
+
+      {filtered.length === 0 ? (
         <div className="text-center py-10">
           <p className="text-3xl mb-2">👥</p>
           <p className="text-emerald-200/60 text-sm">No team pairs yet</p>
           <p className="text-emerald-200/40 text-xs mt-1">Play team matches to see partnerships.</p>
         </div>
       ) : (
-        ranked.map((p, idx) => (
+        filtered.map((p, idx) => (
           <PairRankingRow key={`${p.aIdentifier}__${p.bIdentifier}`} pair={p} rank={idx + 1} />
         ))
       )}
 
       <p className="text-[10px] text-emerald-200/30 text-center mt-4 leading-relaxed">
-        Each pair = a unique 2-player team. Pairs with 1 match shown; rankings stabilize as you play more.
+        Each pair = a unique 2-player team. Tap a player pill to filter their partnerships.
       </p>
     </>
   );
