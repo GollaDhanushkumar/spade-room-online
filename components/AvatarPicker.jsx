@@ -54,11 +54,11 @@ export default function AvatarPicker({
   const friendsList = [...FRIEND_AVATARS, ...unlockedSecrets];
 
   const groups = [
-    { title: 'Friends', items: friendsList.map((a) => ({ ...a, group: 'friend' })), onTitleTap: handleFriendsLabelTap },
-    { title: 'Adventurer', items: DICEBEAR_AVATARS.filter((a) => a.style === 'adventurer') },
-    { title: 'Avataaars', items: DICEBEAR_AVATARS.filter((a) => a.style === 'avataaars') },
-    { title: 'Micah', items: DICEBEAR_AVATARS.filter((a) => a.style === 'micah') },
-  ];
+  { title: 'Friends', items: friendsList.map((a) => ({ ...a, group: 'friend' })), onTitleTap: handleFriendsLabelTap },
+  { title: 'Avataaars', items: DICEBEAR_AVATARS.filter((a) => a.style === 'avataaars') },
+  { title: 'Personas', items: DICEBEAR_AVATARS.filter((a) => a.style === 'personas') },
+  { title: 'Dylan', items: DICEBEAR_AVATARS.filter((a) => a.style === 'dylan') },
+];
 
   return (
     <div className="space-y-3">
