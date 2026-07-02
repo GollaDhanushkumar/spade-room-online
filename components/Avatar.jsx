@@ -23,6 +23,9 @@ export default function Avatar({
   const tapCountRef = useRef(0);
   const lastTapRef = useRef(0);
 
+  const currentAvatarSrc =
+    showSecretFlip && av?.secretFlipSrc ? av.secretFlipSrc : av?.src;
+
   function handleAvatarTap() {
     if (!av?.secretFlipSrc) return;
 
@@ -38,6 +41,7 @@ export default function Avatar({
 
     if (tapCountRef.current >= 3) {
       tapCountRef.current = 0;
+      setImgError(false);
       setShowSecretFlip((prev) => !prev);
     }
   }
@@ -83,7 +87,8 @@ export default function Avatar({
   } else {
    content = (
       <img
-        src={showSecretFlip && av.secretFlipSrc ? av.secretFlipSrc : av.src}
+        key={currentAvatarSrc}
+        src={currentAvatarSrc}
         alt={av.name || playerName || ''}
         width={px * 2}
         height={px * 2}
