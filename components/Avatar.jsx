@@ -19,12 +19,12 @@ export default function Avatar({
 
   const av = resolveAvatar(avatarId);
   const [imgError, setImgError] = useState(false);
-  const [showSecretFlip, setShowSecretFlip] = useState(false);
+  const [showSecretImage, setShowSecretImage] = useState(false);
   const tapCountRef = useRef(0);
   const lastTapRef = useRef(0);
 
   const currentAvatarSrc =
-    showSecretFlip && av?.secretFlipSrc ? av.secretFlipSrc : av?.src;
+    showSecretImage && av?.secretFlipSrc ? av.secretFlipSrc : av?.src;
 
   function handleAvatarTap() {
     if (!av?.secretFlipSrc) return;
@@ -42,7 +42,7 @@ export default function Avatar({
     if (tapCountRef.current >= 3) {
       tapCountRef.current = 0;
       setImgError(false);
-      setShowSecretFlip((prev) => !prev);
+      setShowSecretImage((prev) => !prev);
     }
   }
 
@@ -85,7 +85,7 @@ export default function Avatar({
       </div>
     );
   } else {
-   content = (
+    content = (
       <img
         key={currentAvatarSrc}
         src={currentAvatarSrc}
@@ -97,14 +97,14 @@ export default function Avatar({
         loading="eager"
         decoding="async"
         style={{
-          width: px, height: px,
+          width: px,
+          height: px,
           borderRadius: '50%',
           objectFit: 'cover',
           background: '#14271f',
           imageRendering: 'auto',
           cursor: av.secretFlipSrc ? 'pointer' : 'default',
-          transition: 'transform 0.35s ease',
-          transform: showSecretFlip ? 'rotateY(180deg)' : 'rotateY(0deg)',
+          transform: 'none',
         }}
       />
     );
