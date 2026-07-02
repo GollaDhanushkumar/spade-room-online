@@ -337,24 +337,50 @@ function RankingsView({ matches, hiddenRows, iAmHost }) {
 // Individual rankings (individual mode matches only)
 // ──────────────────────────────────────────────────────────
 function IndividualRankings({ matches, hiddenSet, iAmHost, editMode, setEditMode, onHideClick }) {
+  const [sortBy, setSortBy] = useState('winRate');
   const indivMatches = matches.filter((m) => m.mode === 'individual');
   const stats = computePlayerStats(indivMatches);
   const visible = Object.values(stats).filter((p) => !hiddenSet.has(p.identifier));
+
   const ranked = visible.sort((a, b) => {
-    if (b.winRate !== a.winRate) return b.winRate - a.winRate;
-    return b.totalPoints - a.totalPoints;
+    if (sortBy === 'winRate') {
+      if (b.winRate !== a.winRate) return b.winRate - a.winRate;
+      return b.totalPoints - a.totalPoints;
+    }
+    if (sortBy === 'totalPoints') return b.totalPoints - a.totalPoints;
+    if (sortBy === 'bidAccuracy') {
+      const aAcc = a.totalBids > 0 ? a.correctBids / a.totalBids : 0;
+      const bAcc = b.totalBids > 0 ? b.correctBids / b.totalBids : 0;
+      return bAcc - aAcc;
+    }
+    if (sortBy === 'matches') return b.matchesPlayed - a.matchesPlayed;
+    return 0;
   });
+
+  const sortLabels = {
+    winRate: 'Win Rate',
+    totalPoints: 'Total Points',
+    bidAccuracy: 'Bid Accuracy',
+    matches: 'Matches Played',
+  };
 
   return (
     <>
-      <div className="flex items-center justify-between mb-2">
-        <p className="text-[10px] uppercase tracking-widest text-emerald-200/40">
-          {indivMatches.length} individual {indivMatches.length === 1 ? 'match' : 'matches'} · sorted by win rate
-        </p>
+      <div className="flex items-center gap-2 mb-2">
+        <select
+          value={sortBy}
+          onChange={(e) => setSortBy(e.target.value)}
+          className="flex-1 px-2 py-1.5 rounded-lg bg-[#14271f] border border-emerald-900/60 text-emerald-200/80 text-[11px] focus:border-amber-300/60 outline-none cursor-pointer"
+        >
+          <option value="winRate">Sort: Win Rate</option>
+          <option value="totalPoints">Sort: Total Points</option>
+          <option value="bidAccuracy">Sort: Bid Accuracy</option>
+          <option value="matches">Sort: Matches Played</option>
+        </select>
         {iAmHost && ranked.length > 0 && (
           <button
             onClick={() => setEditMode((v) => !v)}
-            className={`text-[10px] uppercase tracking-wider px-2 py-1 rounded transition ${
+            className={`text-[10px] uppercase tracking-wider px-2 py-1 rounded transition flex-shrink-0 ${
               editMode
                 ? 'bg-amber-300 text-[#07100c] font-bold'
                 : 'border border-emerald-900 text-emerald-200/70 hover:bg-emerald-950/40'
@@ -364,6 +390,9 @@ function IndividualRankings({ matches, hiddenSet, iAmHost, editMode, setEditMode
           </button>
         )}
       </div>
+      <p className="text-[10px] uppercase tracking-widest text-emerald-200/40 mb-2">
+        {indivMatches.length} individual {indivMatches.length === 1 ? 'match' : 'matches'} · sorted by {sortLabels[sortBy]}
+      </p>
 
       {ranked.length === 0 ? (
         <div className="text-center py-10">
@@ -686,20 +715,34 @@ function computePlayerStats(matches) {
    const sortedScores = Object.entries(finalScores).sort((a, b) => b[1] - a[1]);
     const topScore = sortedScores[0]?.[1] ?? 0;
 
-    // Build tie-aware placement map: players with equal scores share a rank;
-    // the next distinct score skips ahead by the count of tied players (1,1,3,4...)
-    const scoreEntries = playerSnap.map((p) => ({
-      pid: p.player_id,
-      score: finalScores[p.player_id] ?? 0,
-    }));
-    scoreEntries.sort((a, b) => b.score - a.score);
+   // Build placement map — bid accuracy as tiebreaker when scores equal
+    const totalPlayers = playerSnap.length;
+    const scoreEntries = playerSnap.map((p) => {
+      const score = finalScores[p.player_id] ?? 0;
+      let correctBids = 0, totalBids = 0;
+      for (const r of roundBreakdown) {
+        if (!r.completed) continue;
+        const bid = r.bids?.[p.player_id] ?? 0;
+        const won = r.tricks_won?.[p.player_id] ?? 0;
+        totalBids += 1;
+        if (bid === won) correctBids += 1;
+      }
+      const bidAcc = totalBids > 0 ? correctBids / totalBids : 0;
+      return { pid: p.player_id, score, bidAcc };
+    });
+    scoreEntries.sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      return b.bidAcc - a.bidAcc;
+    });
     const placementMap = {};
     let rank = 0;
     let prevScore = null;
+    let prevBidAcc = null;
     scoreEntries.forEach((e, idx) => {
-      if (e.score !== prevScore) {
+      if (e.score !== prevScore || e.bidAcc !== prevBidAcc) {
         rank = idx + 1;
         prevScore = e.score;
+        prevBidAcc = e.bidAcc;
       }
       placementMap[e.pid] = rank;
     });
@@ -736,12 +779,15 @@ function computePlayerStats(matches) {
       if (iWon) s.wins += 1; else s.losses += 1;
       s.recentResults.push(iWon ? 'W' : 'L');
 
-      // Placement (1st/2nd/3rd/last), tie-aware (competition ranking: ties share a place)
+      // Medal rules by player count:
+      // 2-player:  1st=🥇  2nd=🪦
+      // 3-player:  1st=🥇  2nd=🥈  3rd=🪦
+      // 4+-player: 1st=🥇  2nd=🥈  3rd=🥉  middle=nothing  last=🪦
       const myPlacement = placementMap[p.player_id];
       if (myPlacement === 1) s.firstCount += 1;
-      else if (myPlacement === 2) s.secondCount += 1;
-      else if (myPlacement === 3) s.thirdCount += 1;
-      if (maxPlacement > 3 && myPlacement === maxPlacement) s.lastCount += 1;
+      if (myPlacement === 2 && totalPlayers >= 3) s.secondCount += 1;
+      if (myPlacement === 3 && totalPlayers >= 4) s.thirdCount += 1;
+      if (myPlacement === maxPlacement && myPlacement > 1) s.lastCount += 1;
 
       for (const r of roundBreakdown) {
         if (!r.completed) continue;
