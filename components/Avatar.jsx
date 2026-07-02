@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { resolveAvatar, FRIEND_PLACEHOLDER_COLORS, FRIEND_AVATARS } from '@/lib/avatars';
 
 // size: 'xs' (20px) | 'sm' (32px) | 'md' (44px) | 'lg' (64px) | 'xl' (96px)
@@ -19,6 +19,28 @@ export default function Avatar({
 
   const av = resolveAvatar(avatarId);
   const [imgError, setImgError] = useState(false);
+  const [showSecretFlip, setShowSecretFlip] = useState(false);
+  const tapCountRef = useRef(0);
+  const lastTapRef = useRef(0);
+
+  function handleAvatarTap() {
+    if (!av?.secretFlipSrc) return;
+
+    const now = Date.now();
+
+    if (now - lastTapRef.current > 1200) {
+      tapCountRef.current = 1;
+    } else {
+      tapCountRef.current += 1;
+    }
+
+    lastTapRef.current = now;
+
+    if (tapCountRef.current >= 3) {
+      tapCountRef.current = 0;
+      setShowSecretFlip((prev) => !prev);
+    }
+  }
 
   // Determine what to show
   let content;
@@ -61,10 +83,11 @@ export default function Avatar({
   } else {
    content = (
       <img
-        src={av.src}
+        src={showSecretFlip && av.secretFlipSrc ? av.secretFlipSrc : av.src}
         alt={av.name || playerName || ''}
         width={px * 2}
         height={px * 2}
+        onClick={handleAvatarTap}
         onError={() => setImgError(true)}
         loading="eager"
         decoding="async"
@@ -74,6 +97,9 @@ export default function Avatar({
           objectFit: 'cover',
           background: '#14271f',
           imageRendering: 'auto',
+          cursor: av.secretFlipSrc ? 'pointer' : 'default',
+          transition: 'transform 0.35s ease',
+          transform: showSecretFlip ? 'rotateY(180deg)' : 'rotateY(0deg)',
         }}
       />
     );
