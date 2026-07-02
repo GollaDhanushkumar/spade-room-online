@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { FRIEND_AVATARS, SECRET_AVATARS, DICEBEAR_AVATARS, findSecretAvatarByName } from '@/lib/avatars';
+import { FRIEND_AVATARS, SECRET_AVATARS, ANIMAL_AVATARS, DICEBEAR_AVATARS, findSecretAvatarByName } from '@/lib/avatars';
 import Avatar from './Avatar';
 
 // Inline picker — fits inside the home page form OR the lobby modal
@@ -55,9 +55,9 @@ export default function AvatarPicker({
 
   const groups = [
   { title: 'Friends', items: friendsList.map((a) => ({ ...a, group: 'friend' })), onTitleTap: handleFriendsLabelTap },
+  { title: 'Animals', items: ANIMAL_AVATARS },
   { title: 'Avataaars', items: DICEBEAR_AVATARS.filter((a) => a.style === 'avataaars') },
-  { title: 'Personas', items: DICEBEAR_AVATARS.filter((a) => a.style === 'personas') },
-  { title: 'Dylan', items: DICEBEAR_AVATARS.filter((a) => a.style === 'dylan') },
+  { title: 'Lorelei', items: DICEBEAR_AVATARS.filter((a) => a.style === 'lorelei') },
 ];
 
   return (
