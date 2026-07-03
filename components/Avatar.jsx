@@ -18,14 +18,14 @@ export default function Avatar({
   const px = sizes[size] ?? sizes.md;
 
   const av = resolveAvatar(avatarId);
-  const [imgError, setImgError] = useState(false);
-  // Store the avatarId that is currently showing secret — not just true/false
-  // This ensures Bhavana and Sindhu never share each other's secret state
-  const [secretActiveId, setSecretActiveId] = useState(null);
+ const [imgError, setImgError] = useState(false);
+  // Use a Set so multiple avatars can independently be in secret mode at the same time
+  // Sindhu and Bhavana can BOTH show their secret pics simultaneously if they want
+  const [secretActiveIds, setSecretActiveIds] = useState(new Set());
   const tapCountRef = useRef(0);
   const lastTapRef = useRef(0);
 
-  const isShowingSecret = secretActiveId === avatarId;
+  const isShowingSecret = secretActiveIds.has(avatarId);
   const currentAvatarSrc =
     isShowingSecret && av?.secretFlipSrc ? av.secretFlipSrc : av?.src;
 
@@ -45,8 +45,15 @@ export default function Avatar({
     if (tapCountRef.current >= 3) {
       tapCountRef.current = 0;
       setImgError(false);
-      // Toggle: if THIS avatar is showing secret, turn it off. Otherwise turn it on.
-      setSecretActiveId((prev) => (prev === avatarId ? null : avatarId));
+      setSecretActiveIds((prev) => {
+        const next = new Set(prev);
+        if (next.has(avatarId)) {
+          next.delete(avatarId); // tap again → back to pic 1
+        } else {
+          next.add(avatarId);    // triple tap → show secret pic
+        }
+        return next;
+      });
     }
   }
 
