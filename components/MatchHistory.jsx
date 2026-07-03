@@ -402,12 +402,13 @@ function IndividualRankings({ matches, hiddenSet, iAmHost, editMode, setEditMode
       ) : (
         ranked.map((p, idx) => (
           <PlayerRankingRow
-            key={p.identifier}
-            player={p}
-            rank={idx + 1}
-            editMode={editMode}
-            onHideClick={() => onHideClick(p)}
-          />
+  key={p.identifier}
+  player={p}
+  rank={idx + 1}
+  sortBy={sortBy}
+  editMode={editMode}
+  onHideClick={() => onHideClick(p)}
+/>
         ))
       )}
 
@@ -418,12 +419,21 @@ function IndividualRankings({ matches, hiddenSet, iAmHost, editMode, setEditMode
   );
 }
 
-function PlayerRankingRow({ player, rank, editMode, onHideClick }) {
+function PlayerRankingRow({ player, rank, sortBy, editMode, onHideClick }) {
   const [expanded, setExpanded] = useState(false);
   const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : `#${rank}`;
   const winRatePct = Math.round(player.winRate * 100);
   const avgScore = player.matchesPlayed > 0 ? Math.round(player.totalPoints / player.matchesPlayed) : 0;
   const bidAccuracyPct = player.totalBids > 0 ? Math.round((player.correctBids / player.totalBids) * 100) : 0;
+
+  const displayMetric =
+  sortBy === 'totalPoints'
+    ? { value: `${player.totalPoints > 0 ? '+' : ''}${player.totalPoints}`, label: 'total points' }
+    : sortBy === 'bidAccuracy'
+      ? { value: `${bidAccuracyPct}%`, label: 'bid accuracy' }
+      : sortBy === 'matches'
+        ? { value: player.matchesPlayed, label: 'matches' }
+        : { value: `${winRatePct}%`, label: 'win rate' };
 
   const streakLabel = player.currentStreak === 0
     ? 'No streak'
@@ -450,10 +460,10 @@ function PlayerRankingRow({ player, rank, editMode, onHideClick }) {
             {player.wins}W · {player.losses}L · {player.matchesPlayed} matches
           </p>
         </button>
-        <div className="text-right flex-shrink-0">
-          <p className="text-lg font-serif italic font-bold text-amber-200">{winRatePct}%</p>
-          <p className="text-[9px] text-emerald-200/40 uppercase tracking-wider">win rate</p>
-        </div>
+       <div className="text-right flex-shrink-0">
+  <p className="text-lg font-serif italic font-bold text-amber-200">{displayMetric.value}</p>
+  <p className="text-[9px] text-emerald-200/40 uppercase tracking-wider">{displayMetric.label}</p>
+</div>
         {editMode && (
           <button
             onClick={onHideClick}
