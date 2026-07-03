@@ -19,12 +19,15 @@ export default function Avatar({
 
   const av = resolveAvatar(avatarId);
   const [imgError, setImgError] = useState(false);
-  const [showSecretImage, setShowSecretImage] = useState(false);
+  // Store the avatarId that is currently showing secret — not just true/false
+  // This ensures Bhavana and Sindhu never share each other's secret state
+  const [secretActiveId, setSecretActiveId] = useState(null);
   const tapCountRef = useRef(0);
   const lastTapRef = useRef(0);
 
+  const isShowingSecret = secretActiveId === avatarId;
   const currentAvatarSrc =
-    showSecretImage && av?.secretFlipSrc ? av.secretFlipSrc : av?.src;
+    isShowingSecret && av?.secretFlipSrc ? av.secretFlipSrc : av?.src;
 
   function handleAvatarTap() {
     if (!av?.secretFlipSrc) return;
@@ -42,7 +45,8 @@ export default function Avatar({
     if (tapCountRef.current >= 3) {
       tapCountRef.current = 0;
       setImgError(false);
-      setShowSecretImage((prev) => !prev);
+      // Toggle: if THIS avatar is showing secret, turn it off. Otherwise turn it on.
+      setSecretActiveId((prev) => (prev === avatarId ? null : avatarId));
     }
   }
 
