@@ -19,14 +19,18 @@ export default function Avatar({
 
   const av = resolveAvatar(avatarId);
   const [imgError, setImgError] = useState(false);
-  const [showSecretImage, setShowSecretImage] = useState(false);
+  const [secretAvatarId, setSecretAvatarId] = useState(null);
   const tapCountRef = useRef(0);
   const lastTapRef = useRef(0);
+
+  const showSecretImage = secretAvatarId === avatarId;
 
   const currentAvatarSrc =
     showSecretImage && av?.secretFlipSrc ? av.secretFlipSrc : av?.src;
 
-  function handleAvatarTap() {
+  function handleAvatarTap(e) {
+    e.stopPropagation();
+
     if (!av?.secretFlipSrc) return;
 
     const now = Date.now();
@@ -42,7 +46,7 @@ export default function Avatar({
     if (tapCountRef.current >= 3) {
       tapCountRef.current = 0;
       setImgError(false);
-      setShowSecretImage((prev) => !prev);
+      setSecretAvatarId((prev) => (prev === avatarId ? null : avatarId));
     }
   }
 
@@ -87,7 +91,7 @@ export default function Avatar({
   } else {
     content = (
       <img
-        key={currentAvatarSrc}
+        key={`${avatarId}-${currentAvatarSrc}`}
         src={currentAvatarSrc}
         alt={av.name || playerName || ''}
         width={px * 2}
