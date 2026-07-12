@@ -189,7 +189,7 @@ function MatchRow({ match, currentRoom, onClick }) {
 // Rankings view with sub-tabs (Individual / Pairs)
 // ──────────────────────────────────────────────────────────
 function RankingsView({ matches, hiddenRows, iAmHost }) {
-  const [subTab, setSubTab] = useState('individual'); // 'individual' | 'pairs'
+  const [subTab, setSubTab] = useState('individual'); // 'individual' | 'team'
   const [editMode, setEditMode] = useState(false);
   const [showHiddenList, setShowHiddenList] = useState(false);
   const [confirmHide, setConfirmHide] = useState(null);
@@ -231,15 +231,16 @@ function RankingsView({ matches, hiddenRows, iAmHost }) {
         >
           Individual
         </button>
+
         <button
-          onClick={() => setSubTab('pairs')}
+          onClick={() => setSubTab('team')}
           className={`flex-1 py-2 text-[11px] uppercase tracking-wider rounded-md transition ${
-            subTab === 'pairs'
+            subTab === 'team'
               ? 'bg-amber-300 text-[#07100c] font-bold'
               : 'text-emerald-200/60 hover:text-emerald-200'
           }`}
         >
-          Team Pairs
+          Team
         </button>
       </div>
 
@@ -253,7 +254,7 @@ function RankingsView({ matches, hiddenRows, iAmHost }) {
           onHideClick={(p) => setConfirmHide({ identifier: p.identifier, displayName: p.displayName })}
         />
       ) : (
-        <PairRankings
+        <TeamRankings
           matches={matches}
           hiddenSet={hiddenSet}
         />
@@ -499,6 +500,38 @@ function PlayerRankingRow({ player, rank, sortBy, editMode, onHideClick }) {
 }
 
 // ──────────────────────────────────────────────────────────
+// Team rankings wrapper — Pair Rankings / Player Stats inside Team
+// ──────────────────────────────────────────────────────────
+function TeamRankings({ matches, hiddenSet }) {
+  const [teamView, setTeamView] = useState('pairs'); // 'pairs' | 'players'
+
+  return (
+    <>
+      <div className="mb-3 flex items-center gap-2">
+        <p className="text-[10px] uppercase tracking-widest text-emerald-200/40 flex-shrink-0">
+          View
+        </p>
+
+        <select
+          value={teamView}
+          onChange={(e) => setTeamView(e.target.value)}
+          className="flex-1 px-3 py-2 rounded-xl bg-[#14271f] border border-emerald-900/60 text-emerald-200 text-xs focus:border-amber-300/60 outline-none cursor-pointer"
+        >
+          <option value="pairs">Pair Rankings</option>
+          <option value="players">Player Stats</option>
+        </select>
+      </div>
+
+      {teamView === 'pairs' ? (
+        <PairRankings matches={matches} hiddenSet={hiddenSet} />
+      ) : (
+        <TeamPlayerRankings matches={matches} hiddenSet={hiddenSet} />
+      )}
+    </>
+  );
+}
+
+// ──────────────────────────────────────────────────────────
 // Pair rankings — unique team pairings sorted by their win rate
 // ──────────────────────────────────────────────────────────
 function PairRankings({ matches, hiddenSet }) {
@@ -673,6 +706,180 @@ function PairRankingRow({ pair, rank }) {
 }
 
 
+
+
+// ──────────────────────────────────────────────────────────
+// Team player stats — player-wise performance in team mode
+// ──────────────────────────────────────────────────────────
+function TeamPlayerRankings({ matches, hiddenSet }) {
+  const [sortBy, setSortBy] = useState('winRate');
+  const [filterPlayer, setFilterPlayer] = useState(null);
+
+  const teamMatches = matches.filter((m) => m.mode === 'team');
+  const stats = computeTeamPlayerStats(teamMatches);
+  const visible = Object.values(stats).filter((p) => !hiddenSet.has(p.identifier));
+
+  const ranked = visible.sort((a, b) => {
+    if (sortBy === 'winRate') {
+      if (b.winRate !== a.winRate) return b.winRate - a.winRate;
+      return b.matchesPlayed - a.matchesPlayed;
+    }
+    if (sortBy === 'totalPoints') return b.totalPoints - a.totalPoints;
+    if (sortBy === 'bidAccuracy') {
+      const aAcc = a.totalBids > 0 ? a.correctBids / a.totalBids : 0;
+      const bAcc = b.totalBids > 0 ? b.correctBids / b.totalBids : 0;
+      return bAcc - aAcc;
+    }
+    if (sortBy === 'matches') return b.matchesPlayed - a.matchesPlayed;
+    return 0;
+  });
+
+  const allPlayers = [...ranked].sort((a, b) => a.displayName.localeCompare(b.displayName));
+  const filtered = filterPlayer ? ranked.filter((p) => p.identifier === filterPlayer) : ranked;
+
+  const sortLabels = {
+    winRate: 'Win Rate',
+    totalPoints: 'Total Points',
+    bidAccuracy: 'Bid Accuracy',
+    matches: 'Matches Played',
+  };
+
+  return (
+    <>
+      <div className="flex items-center gap-2 mb-2">
+        <select
+          value={sortBy}
+          onChange={(e) => setSortBy(e.target.value)}
+          className="flex-1 px-2 py-1.5 rounded-lg bg-[#14271f] border border-emerald-900/60 text-emerald-200/80 text-[11px] focus:border-amber-300/60 outline-none cursor-pointer"
+        >
+          <option value="winRate">Sort: Win Rate</option>
+          <option value="totalPoints">Sort: Total Points</option>
+          <option value="bidAccuracy">Sort: Bid Accuracy</option>
+          <option value="matches">Sort: Matches Played</option>
+        </select>
+
+        {filterPlayer && (
+          <button
+            onClick={() => setFilterPlayer(null)}
+            className="text-[10px] uppercase tracking-wider px-2 py-1.5 rounded bg-amber-300 text-[#07100c] font-bold flex-shrink-0"
+          >
+            Clear ×
+          </button>
+        )}
+      </div>
+
+      {allPlayers.length > 0 && (
+        <div className="mb-3 flex items-center gap-2">
+          <p className="text-[10px] uppercase tracking-widest text-emerald-200/40 flex-shrink-0">
+            Player
+          </p>
+          <select
+            value={filterPlayer ?? ''}
+            onChange={(e) => setFilterPlayer(e.target.value || null)}
+            className="flex-1 px-3 py-2 rounded-xl bg-[#14271f] border border-emerald-900/60 text-emerald-200 text-xs focus:border-amber-300/60 outline-none cursor-pointer"
+          >
+            <option value="">All players</option>
+            {allPlayers.map((p) => (
+              <option key={p.identifier} value={p.identifier}>
+                {p.displayName} ({p.matchesPlayed} matches)
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      <p className="text-[10px] uppercase tracking-widest text-emerald-200/40 mb-2">
+        {teamMatches.length} team {teamMatches.length === 1 ? 'match' : 'matches'} · {ranked.length} team {ranked.length === 1 ? 'player' : 'players'} · sorted by {sortLabels[sortBy]}
+      </p>
+
+      {filtered.length === 0 ? (
+        <div className="text-center py-10">
+          <p className="text-3xl mb-2">👤</p>
+          <p className="text-emerald-200/60 text-sm">No team player stats yet</p>
+          <p className="text-emerald-200/40 text-xs mt-1">Play team matches to see player stats.</p>
+        </div>
+      ) : (
+        filtered.map((p, idx) => (
+          <TeamPlayerRankingRow
+            key={p.identifier}
+            player={p}
+            rank={idx + 1}
+            sortBy={sortBy}
+          />
+        ))
+      )}
+
+      <p className="text-[10px] text-emerald-200/30 text-center mt-4 leading-relaxed">
+        Team player stats show each player’s overall performance across team-mode matches.
+      </p>
+    </>
+  );
+}
+
+function TeamPlayerRankingRow({ player, rank, sortBy }) {
+  const [expanded, setExpanded] = useState(false);
+  const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : `#${rank}`;
+  const winRatePct = Math.round(player.winRate * 100);
+  const avgScore = player.matchesPlayed > 0 ? Math.round(player.totalPoints / player.matchesPlayed) : 0;
+  const bidAccuracyPct = player.totalBids > 0 ? Math.round((player.correctBids / player.totalBids) * 100) : 0;
+
+  const displayMetric =
+    sortBy === 'totalPoints'
+      ? { value: `${player.totalPoints > 0 ? '+' : ''}${player.totalPoints}`, label: 'team points' }
+      : sortBy === 'bidAccuracy'
+        ? { value: `${bidAccuracyPct}%`, label: 'bid accuracy' }
+        : sortBy === 'matches'
+          ? { value: player.matchesPlayed, label: 'matches' }
+          : { value: `${winRatePct}%`, label: 'win rate' };
+
+  return (
+    <div className="bg-[#14271f] border border-emerald-900/50 rounded-xl p-3 transition mb-2">
+      <div className="flex items-center gap-3">
+        <span className="text-lg font-serif italic text-amber-200 w-10 text-center flex-shrink-0">{medal}</span>
+        <Avatar avatarId={player.avatarId} playerName={player.displayName} size="sm" />
+        <button
+          onClick={() => setExpanded((v) => !v)}
+          className="flex-1 min-w-0 text-left"
+        >
+          <p className="text-sm font-medium truncate">{player.displayName}</p>
+          <p className="text-[10px] text-emerald-200/50">
+            {player.wins}W · {player.losses}L · {player.matchesPlayed} team matches
+          </p>
+        </button>
+        <div className="text-right flex-shrink-0">
+          <p className="text-lg font-serif italic font-bold text-amber-200">{displayMetric.value}</p>
+          <p className="text-[9px] text-emerald-200/40 uppercase tracking-wider">{displayMetric.label}</p>
+        </div>
+      </div>
+
+      {expanded && (
+        <div className="mt-3 pt-3 border-t border-emerald-900/40">
+          <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+            <StatLine label="Total team points" value={`${player.totalPoints > 0 ? '+' : ''}${player.totalPoints}`} color={player.totalPoints > 0 ? '#86efac' : '#fca5a5'} />
+            <StatLine label="Avg / team match" value={`${avgScore > 0 ? '+' : ''}${avgScore}`} color={avgScore > 0 ? '#86efac' : '#fca5a5'} />
+            <StatLine label="Best team score" value={`${player.bestMatch > 0 ? '+' : ''}${player.bestMatch}`} color="#86efac" />
+            <StatLine label="Worst team score" value={`${player.worstMatch > 0 ? '+' : ''}${player.worstMatch}`} color="#fca5a5" />
+            <StatLine label="Bid accuracy" value={`${bidAccuracyPct}% (${player.correctBids}/${player.totalBids})`} color="#e5d4a8" />
+            <StatLine label="Partners" value={player.teammateCount} color="#e5d4a8" />
+          </div>
+
+          <div className="mt-3 pt-3 border-t border-emerald-900/30 grid grid-cols-1 gap-2 text-xs">
+            <StatLine
+              label="Best teammate"
+              value={player.bestTeammate ? `${player.bestTeammate.name} · ${player.bestTeammate.wins}W/${player.bestTeammate.matchesPlayed}M` : '—'}
+              color="#86efac"
+            />
+            <StatLine
+              label="Most difficult teammate"
+              value={player.worstTeammate ? `${player.worstTeammate.name} · ${player.worstTeammate.wins}W/${player.worstTeammate.matchesPlayed}M` : '—'}
+              color="#fca5a5"
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function PlacementBadge({ emoji, label, count }) {
   return (
@@ -936,6 +1143,134 @@ function computePairStats(matches) {
   }
 
   return pairsByKey;
+}
+
+
+// ──────────────────────────────────────────────────────────
+// Compute team player stats (team matches only)
+// ──────────────────────────────────────────────────────────
+function computeTeamPlayerStats(matches) {
+  const statsByIdentifier = {};
+  const getIdentifier = makeIdentifierResolver();
+
+  for (const match of matches) {
+    const finalScores = match.final_scores || {};
+    const teamSnap = match.team_snapshot || [];
+    const roundBreakdown = match.round_breakdown || [];
+
+    const sortedScores = Object.entries(finalScores).sort((a, b) => b[1] - a[1]);
+    const topScore = sortedScores[0]?.[1] ?? 0;
+
+    for (const team of teamSnap) {
+      const members = team.members || [];
+      if (members.length === 0) continue;
+
+      const teamScore = finalScores[team.team_id] ?? 0;
+      const teamWon = (team.team_id in finalScores) && teamScore === topScore;
+
+      const resolvedMembers = members.map((m) => ({
+        member: m,
+        identifier: getIdentifier(m.name, m.avatar_id),
+      }));
+
+      for (const current of resolvedMembers) {
+        const p = current.member;
+        const identifier = current.identifier;
+
+        if (!statsByIdentifier[identifier]) {
+          statsByIdentifier[identifier] = {
+            identifier,
+            displayName: p.name,
+            avatarId: p.avatar_id,
+            matchesPlayed: 0,
+            wins: 0,
+            losses: 0,
+            winRate: 0,
+            totalPoints: 0,
+            bestMatch: -Infinity,
+            worstMatch: Infinity,
+            totalBids: 0,
+            correctBids: 0,
+            teammates: {},
+            teammateCount: 0,
+            bestTeammate: null,
+            worstTeammate: null,
+          };
+        }
+
+        const s = statsByIdentifier[identifier];
+        s.matchesPlayed += 1;
+        s.totalPoints += teamScore;
+        if (teamScore > s.bestMatch) s.bestMatch = teamScore;
+        if (teamScore < s.worstMatch) s.worstMatch = teamScore;
+        if (teamWon) s.wins += 1;
+        else s.losses += 1;
+
+        for (const r of roundBreakdown) {
+          if (!r.completed) continue;
+          const bid = r.bids?.[team.team_id] ?? 0;
+          const won = r.tricks_won?.[team.team_id] ?? 0;
+          s.totalBids += 1;
+          if (bid === won) s.correctBids += 1;
+        }
+
+        for (const teammate of resolvedMembers) {
+          if (teammate.identifier === identifier) continue;
+          const teammateMember = teammate.member;
+
+          if (!s.teammates[teammate.identifier]) {
+            s.teammates[teammate.identifier] = {
+              identifier: teammate.identifier,
+              name: teammateMember.name,
+              avatarId: teammateMember.avatar_id,
+              matchesPlayed: 0,
+              wins: 0,
+              losses: 0,
+              winRate: 0,
+              totalPoints: 0,
+            };
+          }
+
+          const t = s.teammates[teammate.identifier];
+          t.matchesPlayed += 1;
+          t.totalPoints += teamScore;
+          if (teamWon) t.wins += 1;
+          else t.losses += 1;
+        }
+      }
+    }
+  }
+
+  for (const s of Object.values(statsByIdentifier)) {
+    s.winRate = s.matchesPlayed > 0 ? s.wins / s.matchesPlayed : 0;
+    if (s.bestMatch === -Infinity) s.bestMatch = 0;
+    if (s.worstMatch === Infinity) s.worstMatch = 0;
+
+    const teammates = Object.values(s.teammates).map((t) => ({
+      ...t,
+      winRate: t.matchesPlayed > 0 ? t.wins / t.matchesPlayed : 0,
+    }));
+
+    s.teammateCount = teammates.length;
+
+    s.bestTeammate = teammates.length > 0
+      ? [...teammates].sort((a, b) => {
+          if (b.winRate !== a.winRate) return b.winRate - a.winRate;
+          if (b.matchesPlayed !== a.matchesPlayed) return b.matchesPlayed - a.matchesPlayed;
+          return b.totalPoints - a.totalPoints;
+        })[0]
+      : null;
+
+    s.worstTeammate = teammates.length > 0
+      ? [...teammates].sort((a, b) => {
+          if (a.winRate !== b.winRate) return a.winRate - b.winRate;
+          if (b.matchesPlayed !== a.matchesPlayed) return b.matchesPlayed - a.matchesPlayed;
+          return a.totalPoints - b.totalPoints;
+        })[0]
+      : null;
+  }
+
+  return statsByIdentifier;
 }
 
 // ──────────────────────────────────────────────────────────
