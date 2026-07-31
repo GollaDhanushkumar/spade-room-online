@@ -53,9 +53,22 @@ export default function MatchHistoryModal({ code, onClose, iAmHost }) {
     };
   }, []);
 
-  if (selectedMatch) {
-    return <MatchDetail match={selectedMatch} onBack={() => setSelectedMatch(null)} onClose={onClose} />;
-  }
+  const removedSet = new Set(
+  hiddenRows
+    .filter((h) => h.status === 'removed')
+    .map((h) => h.identifier)
+);
+
+if (selectedMatch) {
+  return (
+    <MatchDetail
+      match={selectedMatch}
+      removedSet={removedSet}
+      onBack={() => setSelectedMatch(null)}
+      onClose={onClose}
+    />
+  );
+}
 
   return (
     <div
@@ -119,7 +132,13 @@ export default function MatchHistoryModal({ code, onClose, iAmHost }) {
           ) : activeTab === 'matches' ? (
             <div className="space-y-2">
               {matches.map((m) => (
-                <MatchRow key={m.id} match={m} currentRoom={code} onClick={() => setSelectedMatch(m)} />
+                <MatchRow
+  key={m.id}
+  match={m}
+  currentRoom={code}
+  removedSet={removedSet}
+  onClick={() => setSelectedMatch(m)}
+/>
               ))}
             </div>
           ) : (
@@ -131,11 +150,15 @@ export default function MatchHistoryModal({ code, onClose, iAmHost }) {
   );
 }
 
-function MatchRow({ match, currentRoom, onClick }) {
+function MatchRow({ match, currentRoom, removedSet = new Set(), onClick }) {
   const date = new Date(match.completed_at);
   const dateStr = formatRelativeDate(date);
   const isTeam = match.mode === 'team';
   const wasInThisRoom = match.room_code === currentRoom;
+  const visiblePlayers = (match.player_snapshot || []).filter(
+    (p) => !removedSet.has(simpleIdentifier(p.name))
+  );
+  const visibleWinner = getVisibleWinnerInfo(match, removedSet);
 
   return (
     <button
@@ -160,22 +183,34 @@ function MatchRow({ match, currentRoom, onClick }) {
         <span className="text-xl">🏆</span>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-amber-200 truncate">
-            {match.winner_label}
+            {visibleWinner.label}
           </p>
+          {visibleWinner.changed && (
+            <p className="text-[10px] text-emerald-200/30 truncate">
+              removed player hidden
+            </p>
+          )}
         </div>
-        <p className="text-2xl font-serif italic font-bold whitespace-nowrap"
-          style={{ color: match.winner_score > 0 ? '#86efac' : match.winner_score < 0 ? '#fca5a5' : '#e5d4a8' }}>
-          {match.winner_score > 0 ? '+' : ''}{match.winner_score}
+        <p
+          className="text-2xl font-serif italic font-bold whitespace-nowrap"
+          style={{ color: visibleWinner.score > 0 ? '#86efac' : visibleWinner.score < 0 ? '#fca5a5' : '#e5d4a8' }}
+        >
+          {visibleWinner.score > 0 ? '+' : ''}{visibleWinner.score}
         </p>
       </div>
 
       <div className="flex items-center gap-1 flex-wrap">
-        {(match.player_snapshot || []).slice(0, 8).map((p, i) => (
+        {visiblePlayers.slice(0, 8).map((p, i) => (
           <Avatar key={i} avatarId={p.avatar_id} playerName={p.name} size="xs" />
         ))}
-        {(match.player_snapshot || []).length > 8 && (
+        {visiblePlayers.length > 8 && (
           <span className="text-xs text-emerald-200/40 ml-1">
-            +{match.player_snapshot.length - 8}
+            +{visiblePlayers.length - 8}
+          </span>
+        )}
+        {visiblePlayers.length < (match.player_snapshot || []).length && (
+          <span className="text-[10px] text-emerald-200/30 ml-1">
+            hidden
           </span>
         )}
       </div>
@@ -192,28 +227,47 @@ function RankingsView({ matches, hiddenRows, iAmHost }) {
   const [subTab, setSubTab] = useState('individual'); // 'individual' | 'team'
   const [editMode, setEditMode] = useState(false);
   const [showHiddenList, setShowHiddenList] = useState(false);
-  const [confirmHide, setConfirmHide] = useState(null);
+  const [actionPlayer, setActionPlayer] = useState(null);
   const [working, setWorking] = useState(false);
 
-  const hiddenSet = new Set(hiddenRows.map((h) => h.identifier));
+  const excludedSet = new Set(
+    hiddenRows
+      .filter((h) => (h.status || 'hidden') === 'hidden' || h.status === 'removed')
+      .map((h) => h.identifier)
+  );
 
-  async function handleHide(identifier, displayName) {
+  const visibleHiddenRows = hiddenRows.filter((h) => (h.status || 'hidden') === 'hidden');
+
+  async function handleRankingAction(identifier, displayName, status) {
     if (working) return;
     setWorking(true);
-    const { error } = await supabase.from('hidden_rankings').insert({
-      identifier,
-      display_name: displayName,
-    });
-    if (error) console.error('Failed to hide:', error);
-    setConfirmHide(null);
+
+    const { error } = await supabase.from('hidden_rankings').upsert(
+      {
+        identifier,
+        display_name: displayName,
+        status,
+      },
+      { onConflict: 'identifier' }
+    );
+
+    if (error) console.error(`Failed to ${status}:`, error);
+
+    setActionPlayer(null);
     setWorking(false);
   }
 
   async function handleUnhide(identifier) {
     if (working) return;
     setWorking(true);
-    const { error } = await supabase.from('hidden_rankings').delete().eq('identifier', identifier);
+
+    const { error } = await supabase
+      .from('hidden_rankings')
+      .delete()
+      .eq('identifier', identifier);
+
     if (error) console.error('Failed to unhide:', error);
+
     setWorking(false);
   }
 
@@ -247,34 +301,34 @@ function RankingsView({ matches, hiddenRows, iAmHost }) {
       {subTab === 'individual' ? (
         <IndividualRankings
           matches={matches}
-          hiddenSet={hiddenSet}
+          hiddenSet={excludedSet}
           iAmHost={iAmHost}
           editMode={editMode}
           setEditMode={setEditMode}
-          onHideClick={(p) => setConfirmHide({ identifier: p.identifier, displayName: p.displayName })}
+          onHideClick={(p) => setActionPlayer({ identifier: p.identifier, displayName: p.displayName })}
         />
       ) : (
         <TeamRankings
           matches={matches}
-          hiddenSet={hiddenSet}
+          hiddenSet={excludedSet}
         />
       )}
 
-      {/* Hidden players section (host-only, applies to both tabs) */}
-      {iAmHost && hiddenRows.length > 0 && (
+      {/* Hidden players section (host-only, removed players do not show here) */}
+      {iAmHost && visibleHiddenRows.length > 0 && (
         <div className="mt-4 pt-3 border-t border-emerald-900/40">
           <button
             onClick={() => setShowHiddenList((v) => !v)}
             className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-[#14271f] border border-emerald-900/40 hover:border-amber-300/40 transition text-xs"
           >
             <span className="text-emerald-200/70">
-              🚫 {hiddenRows.length} hidden {hiddenRows.length === 1 ? 'player' : 'players'}
+              🚫 {visibleHiddenRows.length} hidden {visibleHiddenRows.length === 1 ? 'player' : 'players'}
             </span>
             <span className="text-emerald-200/40">{showHiddenList ? '▲' : '▼'}</span>
           </button>
           {showHiddenList && (
             <div className="mt-2 space-y-1.5">
-              {hiddenRows.map((h) => (
+              {visibleHiddenRows.map((h) => (
                 <div
                   key={h.identifier}
                   className="flex items-center justify-between px-3 py-2 rounded-lg bg-[#14271f]/60 border border-emerald-900/30"
@@ -297,36 +351,53 @@ function RankingsView({ matches, hiddenRows, iAmHost }) {
         </div>
       )}
 
-      {/* Hide confirmation modal */}
-      {confirmHide && (
+      {/* Ranking action modal */}
+      {actionPlayer && (
         <div
           className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4"
-          onClick={() => setConfirmHide(null)}
+          onClick={() => setActionPlayer(null)}
         >
           <div
             className="bg-[#0f1d18] border border-amber-300/40 rounded-2xl p-5 max-w-xs w-full"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-lg font-serif italic text-amber-200 mb-2">Hide from rankings?</h3>
+            <h3 className="text-lg font-serif italic text-amber-200 mb-2">
+              What do you want to do?
+            </h3>
+
             <p className="text-emerald-200/70 text-sm mb-4">
-              <span className="font-bold">{confirmHide.displayName}</span> will no longer appear in rankings for anyone. Any team pairs with them will also be hidden. You can unhide them later from the bottom of this page.
+              Choose how to handle <span className="font-bold">{actionPlayer.displayName}</span>.
             </p>
-            <div className="flex gap-2">
+
+            <div className="space-y-2">
               <button
-                onClick={() => setConfirmHide(null)}
+                onClick={() => handleRankingAction(actionPlayer.identifier, actionPlayer.displayName, 'hidden')}
                 disabled={working}
-                className="flex-1 py-2.5 rounded-lg border border-emerald-900 text-emerald-200/70 text-sm hover:bg-emerald-950/40"
+                className="w-full py-2.5 rounded-lg border border-emerald-700/60 text-emerald-100 text-sm hover:bg-emerald-950/50 disabled:opacity-50"
+              >
+                {working ? 'Working...' : 'Hide from rankings'}
+              </button>
+
+              <button
+                onClick={() => handleRankingAction(actionPlayer.identifier, actionPlayer.displayName, 'removed')}
+                disabled={working}
+                className="w-full py-2.5 rounded-lg bg-red-900/40 border border-red-400/50 text-red-200 text-sm hover:bg-red-900/60 disabled:opacity-50"
+              >
+                {working ? 'Working...' : 'Remove from app'}
+              </button>
+
+              <button
+                onClick={() => setActionPlayer(null)}
+                disabled={working}
+                className="w-full py-2.5 rounded-lg border border-emerald-900 text-emerald-200/70 text-sm hover:bg-emerald-950/40 disabled:opacity-50"
               >
                 Cancel
               </button>
-              <button
-                onClick={() => handleHide(confirmHide.identifier, confirmHide.displayName)}
-                disabled={working}
-                className="flex-1 py-2.5 rounded-lg bg-red-900/40 border border-red-400/50 text-red-200 text-sm disabled:opacity-50"
-              >
-                {working ? 'Hiding...' : 'Hide'}
-              </button>
             </div>
+
+            <p className="text-[10px] text-emerald-200/35 mt-4 leading-relaxed">
+              Remove from app hides this player from rankings and match display, but keeps all match data saved in Supabase.
+            </p>
           </div>
         </div>
       )}
@@ -903,6 +974,31 @@ function StatLine({ label, value, color }) {
 // ──────────────────────────────────────────────────────────
 // Smart identifier matching (lowercase name first, then avatar)
 // ──────────────────────────────────────────────────────────
+function simpleIdentifier(name) {
+  return (name || 'unknown').toLowerCase().trim();
+}
+
+function getVisibleWinnerInfo(match, removedSet = new Set()) {
+  const ranked = buildRanking(match, removedSet);
+  const top = ranked[0];
+
+  if (!top) {
+    return {
+      label: 'Removed players',
+      score: 0,
+      changed: true,
+    };
+  }
+
+  const originalLabel = match.winner_label || top.label;
+
+  return {
+    label: top.label,
+    score: top.total,
+    changed: top.label !== originalLabel,
+  };
+}
+
 function makeIdentifierResolver() {
   const seenAvatars = {}; // avatar_id -> identifier
   const seenIdentifiers = new Set();
@@ -1276,13 +1372,14 @@ function computeTeamPlayerStats(matches) {
 // ──────────────────────────────────────────────────────────
 // Match detail view (unchanged)
 // ──────────────────────────────────────────────────────────
-function MatchDetail({ match, onBack, onClose }) {
+function MatchDetail({ match, removedSet = new Set(), onBack, onClose }) {
   const isTeam = match.mode === 'team';
-  const ranked = buildRanking(match);
+  const ranked = buildRanking(match, removedSet);
   const matchTopScore = ranked[0]?.total ?? 0;
   const winnersCount = ranked.filter((r) => r.total === matchTopScore).length;
   const completedRounds = (match.round_breakdown || []).filter((r) => r.completed);
-  const mvp = computeMVPFromMatch(match);
+  const rawMvp = computeMVPFromMatch(match);
+  const mvp = rawMvp && !removedSet.has(simpleIdentifier(rawMvp.member?.name)) ? rawMvp : null;
 
   const date = new Date(match.completed_at);
   const startDate = new Date(match.started_at);
@@ -1475,27 +1572,42 @@ function computeMVPFromMatch(match) {
   return mvp;
 }
 
-function buildRanking(match) {
+function buildRanking(match, removedSet = new Set()) {
   const isTeam = match.mode === 'team';
   const finalScores = match.final_scores || {};
 
   if (isTeam) {
-    return (match.team_snapshot || []).map((t) => ({
-      id: t.team_id,
-      label: t.label,
-      color: TEAM_COLORS[t.palette_idx ?? 0],
-      avatars: (t.members || []).map((m) => ({ id: m.avatar_id, name: m.name })),
-      total: finalScores[t.team_id] ?? 0,
-    })).sort((a, b) => b.total - a.total);
+    return (match.team_snapshot || [])
+      .map((t) => {
+        const visibleMembers = (t.members || []).filter(
+          (m) => !removedSet.has(simpleIdentifier(m.name))
+        );
+
+        return {
+          id: t.team_id,
+          label: visibleMembers.length > 0
+            ? visibleMembers.map((m) => m.name).join(' + ')
+            : 'Removed team',
+          color: TEAM_COLORS[t.palette_idx ?? 0],
+          avatars: visibleMembers.map((m) => ({ id: m.avatar_id, name: m.name })),
+          total: finalScores[t.team_id] ?? 0,
+          removedAllMembers: visibleMembers.length === 0,
+        };
+      })
+      .filter((t) => !t.removedAllMembers)
+      .sort((a, b) => b.total - a.total);
   }
 
-  return (match.player_snapshot || []).map((p) => ({
-    id: p.player_id,
-    label: p.name,
-    color: '#f5d989',
-    avatars: [{ id: p.avatar_id, name: p.name }],
-    total: finalScores[p.player_id] ?? 0,
-  })).sort((a, b) => b.total - a.total);
+  return (match.player_snapshot || [])
+    .filter((p) => !removedSet.has(simpleIdentifier(p.name)))
+    .map((p) => ({
+      id: p.player_id,
+      label: p.name,
+      color: '#f5d989',
+      avatars: [{ id: p.avatar_id, name: p.name }],
+      total: finalScores[p.player_id] ?? 0,
+    }))
+    .sort((a, b) => b.total - a.total);
 }
 
 function formatRelativeDate(date) {
@@ -1510,5 +1622,4 @@ function formatRelativeDate(date) {
   if (diffHours < 24) return `${diffHours}h ago`;
   if (diffDays === 1) return 'Yesterday';
   if (diffDays < 7) return `${diffDays}d ago`;
-  return date.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
-}
+  return date.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });}
