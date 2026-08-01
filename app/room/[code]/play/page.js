@@ -309,6 +309,9 @@ setPlayers(playerRows || []);
   const pendingSpectators = players.filter(
   (p) => p.is_spectator && p.spectator_status === 'pending'
 );
+const approvedSpectators = players.filter(
+  (p) => p.is_spectator && p.spectator_status === 'approved'
+);
 const activeSeats = seats.filter((s) => !s.kicked_at);
 const mySeat = activeSeats.find((s) => s.player_id === me?.playerId);
 const myTeam = mySeat?.team_id ?? null;
@@ -1058,6 +1061,33 @@ function SpectatorRequestsBox() {
   );
 }
 
+function SpectatorsWatchingBox() {
+  if (approvedSpectators.length === 0) return null;
+
+  return (
+    <div className="fixed bottom-4 left-3 right-3 z-30 max-w-md mx-auto bg-[#0f1d18]/95 border border-emerald-700/50 rounded-2xl px-4 py-3 shadow-2xl">
+      <p className="text-[10px] uppercase tracking-widest text-emerald-200/50 mb-2 text-center">
+        Watching this game
+      </p>
+
+      <div className="flex items-center justify-center gap-2 flex-wrap">
+        {approvedSpectators.map((p) => (
+          <div
+            key={p.id}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-950/60 border border-emerald-800/60"
+          >
+            <Avatar avatarId={p.avatar_id} playerName={p.name} size="xs" />
+            <span className="text-xs text-emerald-100 truncate max-w-[120px]">
+              {p.name}
+            </span>
+            <span className="text-xs text-emerald-300/70">👁</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
   if (loading) {
     return <main className="min-h-screen flex items-center justify-center bg-[#0a1410] text-emerald-200">Loading...</main>;
   }
@@ -1079,6 +1109,7 @@ function SpectatorRequestsBox() {
       <>
       {showSpectatorWelcome && <SpectatorWelcome onDismiss={dismissSpectatorWelcome} />}
       <SpectatorRequestsBox />
+      <SpectatorsWatchingBox />
       {iAmSpectator && <SpectatorBadge className="fixed top-3 right-3 z-40" />}
       <GameOverScreen
         code={code}
@@ -1117,6 +1148,7 @@ function SpectatorRequestsBox() {
         <>
         {showSpectatorWelcome && <SpectatorWelcome onDismiss={dismissSpectatorWelcome} />}
         <SpectatorRequestsBox />
+        <SpectatorsWatchingBox />
         <main className="min-h-screen text-emerald-50 px-5 py-7"
         style={{ background: `linear-gradient(to bottom, var(--theme-bg-from, #0a1410), var(--theme-bg-to, #0f3d2c))` }}>
          {(round?.trick_history?.length ?? 0) > 0 && (
@@ -1238,6 +1270,7 @@ function SpectatorRequestsBox() {
       <>
       {showSpectatorWelcome && <SpectatorWelcome onDismiss={dismissSpectatorWelcome} />}
       <SpectatorRequestsBox />
+      <SpectatorsWatchingBox />
       <main className="min-h-screen text-emerald-50 px-5 py-7"
         style={{ background: `linear-gradient(to bottom, var(--theme-bg-from, #0a1410), var(--theme-bg-to, #0f3d2c))` }}>
         {(round?.trick_history?.length ?? 0) > 0 && (
@@ -1511,6 +1544,7 @@ function SpectatorRequestsBox() {
       <>
       {showSpectatorWelcome && <SpectatorWelcome onDismiss={dismissSpectatorWelcome} />}
       <SpectatorRequestsBox />
+      <SpectatorsWatchingBox />
       <main className="min-h-screen text-emerald-50 px-5 py-7"
         style={{ background: `linear-gradient(to bottom, var(--theme-bg-from, #0a1410), var(--theme-bg-to, #0f3d2c))` }}>
         {(round?.trick_history?.length ?? 0) > 0 && (
@@ -1657,6 +1691,7 @@ function SpectatorRequestsBox() {
         <>
         {showSpectatorWelcome && <SpectatorWelcome onDismiss={dismissSpectatorWelcome} />}
         <SpectatorRequestsBox />
+        <SpectatorsWatchingBox />
         <main className="min-h-screen text-emerald-50 px-3 py-5 flex flex-col"
         style={{ background: `linear-gradient(to bottom, var(--theme-bg-from, #0a1410), var(--theme-bg-to, #0f3d2c))` }}>
          {(round?.trick_history?.length ?? 0) > 0 && (
@@ -1757,6 +1792,7 @@ function SpectatorRequestsBox() {
       <>
       {showSpectatorWelcome && <SpectatorWelcome onDismiss={dismissSpectatorWelcome} />}
       <SpectatorRequestsBox />
+      <SpectatorsWatchingBox />
       <main className="min-h-screen text-emerald-50 px-3 py-5 flex flex-col"
         style={{ background: `linear-gradient(to bottom, var(--theme-bg-from, #0a1410), var(--theme-bg-to, #0f3d2c))` }}>
        {(round?.trick_history?.length ?? 0) > 0 && (
