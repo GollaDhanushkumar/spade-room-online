@@ -311,7 +311,10 @@ setPlayers(playerRows || []);
   (p) => p.is_spectator && p.spectator_status === 'pending'
 );
 const approvedSpectators = players.filter(
-  (p) => p.is_spectator && p.spectator_status === 'approved'
+  (p) =>
+    p.is_spectator &&
+    p.spectator_status === 'approved' &&
+    !stalePlayerIds.has(p.id)
 );
 const activeSeats = seats.filter((s) => !s.kicked_at);
 const mySeat = activeSeats.find((s) => s.player_id === me?.playerId);
