@@ -66,7 +66,8 @@ export default function PlayPage({ params }) {
   const [hostId, setHostId] = useState(null);
   const [game, setGame] = useState(null);
   const [room, setRoom] = useState(null);
-  const [seats, setSeats] = useState([]);
+const [seats, setSeats] = useState([]);
+const [players, setPlayers] = useState([]);
   const [allHands, setAllHands] = useState([]);
   const [myHand, setMyHand] = useState([]);
   const [round, setRound] = useState(null);
@@ -143,8 +144,12 @@ export default function PlayPage({ params }) {
         supabase.from('games').select('*').eq('id', gameId).single(),
         supabase.from('players').select('id').eq('room_code', code).eq('is_host', true),
         supabase.from('game_seats').select('*').eq('game_id', gameId),
-        supabase.from('players').select('id, name, avatar_id').eq('room_code', code),
         supabase
+  .from('players')
+  .select('id, name, avatar_id, is_spectator, spectator_status')
+  .eq('room_code', code),
+
+supabase
   .from('players')
   .select('is_spectator, spectator_status')
   .eq('id', me.playerId)
@@ -171,6 +176,7 @@ if (!myPlayerRow || myGameSeat?.kicked_at) {
   router.push(`/room/${code}`);
   return;
 }
+
 const waitingForApproval =
   myPlayerRow?.is_spectator &&
   (myPlayerRow?.spectator_status ?? 'approved') === 'pending';
@@ -186,9 +192,10 @@ if (waitingForApproval) {
         setShowSpectatorWelcome(true);
       }
       setIAmSpectator(amSpectator);
-      setGame(g);
-      setHostId(hostRows?.[0]?.id ?? null);
-      setSeats(enrichedSeats);
+setGame(g);
+setHostId(hostRows?.[0]?.id ?? null);
+setSeats(enrichedSeats);
+setPlayers(playerRows || []);
 
       if (g && g.current_round >= 1) {
         await refreshHandAndRound(gameId, g.current_round, me.playerId);
@@ -299,6 +306,9 @@ if (waitingForApproval) {
   }, [me, code, router]);
 
   const iAmHost = me && hostId === me.playerId;
+  const pendingSpectators = players.filter(
+  (p) => p.is_spectator && p.spectator_status === 'pending'
+);
 const activeSeats = seats.filter((s) => !s.kicked_at);
 const mySeat = activeSeats.find((s) => s.player_id === me?.playerId);
 const myTeam = mySeat?.team_id ?? null;
@@ -980,6 +990,74 @@ const round_breakdown = allRounds.map((r) => ({
     router.push('/');
   }
 
+  async function handleApproveSpectator(playerId) {
+  if (!iAmHost) return;
+
+  await supabase
+    .from('players')
+    .update({ spectator_status: 'approved' })
+    .eq('id', playerId);
+}
+
+async function handleDenySpectator(playerId) {
+  if (!iAmHost) return;
+  if (!confirm('Deny this spectator request?')) return;
+
+  await supabase
+    .from('players')
+    .delete()
+    .eq('id', playerId);
+}
+
+function SpectatorRequestsBox() {
+  if (!iAmHost || pendingSpectators.length === 0) return null;
+
+  return (
+    <div className="fixed top-16 left-3 right-3 z-40 max-w-md mx-auto bg-amber-950/95 border border-amber-700/60 rounded-2xl p-4 shadow-2xl">
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-xs uppercase tracking-widest text-amber-200/80">
+          Spectator Requests
+        </h2>
+        <span className="text-xs text-amber-200/50">
+          {pendingSpectators.length} waiting
+        </span>
+      </div>
+
+      <div className="space-y-2">
+        {pendingSpectators.map((p) => (
+          <div
+            key={p.id}
+            className="flex items-center justify-between gap-3 px-3 py-2 rounded-xl bg-[#14271f] border border-amber-900/40"
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <Avatar avatarId={p.avatar_id} playerName={p.name} size="sm" />
+              <div className="min-w-0">
+                <p className="text-sm font-medium truncate">{p.name}</p>
+                <p className="text-[11px] text-amber-200/50">wants to spectate</p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => handleApproveSpectator(p.id)}
+                className="text-xs px-2.5 py-1.5 rounded-lg bg-emerald-800/80 border border-emerald-500/40 text-emerald-100"
+              >
+                approve
+              </button>
+              <button
+                onClick={() => handleDenySpectator(p.id)}
+                className="text-xs px-2.5 py-1.5 rounded-lg bg-red-900/70 border border-red-500/40 text-red-200"
+              >
+                deny
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
   if (loading) {
     return <main className="min-h-screen flex items-center justify-center bg-[#0a1410] text-emerald-200">Loading...</main>;
   }
@@ -1000,6 +1078,7 @@ const round_breakdown = allRounds.map((r) => ({
     return (
       <>
       {showSpectatorWelcome && <SpectatorWelcome onDismiss={dismissSpectatorWelcome} />}
+      <SpectatorRequestsBox />
       {iAmSpectator && <SpectatorBadge className="fixed top-3 right-3 z-40" />}
       <GameOverScreen
         code={code}
@@ -1037,6 +1116,7 @@ const round_breakdown = allRounds.map((r) => ({
       return (
         <>
         {showSpectatorWelcome && <SpectatorWelcome onDismiss={dismissSpectatorWelcome} />}
+        <SpectatorRequestsBox />
         <main className="min-h-screen text-emerald-50 px-5 py-7"
         style={{ background: `linear-gradient(to bottom, var(--theme-bg-from, #0a1410), var(--theme-bg-to, #0f3d2c))` }}>
          {(round?.trick_history?.length ?? 0) > 0 && (
@@ -1157,6 +1237,7 @@ const round_breakdown = allRounds.map((r) => ({
     return (
       <>
       {showSpectatorWelcome && <SpectatorWelcome onDismiss={dismissSpectatorWelcome} />}
+      <SpectatorRequestsBox />
       <main className="min-h-screen text-emerald-50 px-5 py-7"
         style={{ background: `linear-gradient(to bottom, var(--theme-bg-from, #0a1410), var(--theme-bg-to, #0f3d2c))` }}>
         {(round?.trick_history?.length ?? 0) > 0 && (
@@ -1429,6 +1510,7 @@ const round_breakdown = allRounds.map((r) => ({
     return (
       <>
       {showSpectatorWelcome && <SpectatorWelcome onDismiss={dismissSpectatorWelcome} />}
+      <SpectatorRequestsBox />
       <main className="min-h-screen text-emerald-50 px-5 py-7"
         style={{ background: `linear-gradient(to bottom, var(--theme-bg-from, #0a1410), var(--theme-bg-to, #0f3d2c))` }}>
         {(round?.trick_history?.length ?? 0) > 0 && (
@@ -1574,6 +1656,7 @@ const round_breakdown = allRounds.map((r) => ({
       return (
         <>
         {showSpectatorWelcome && <SpectatorWelcome onDismiss={dismissSpectatorWelcome} />}
+        <SpectatorRequestsBox />
         <main className="min-h-screen text-emerald-50 px-3 py-5 flex flex-col"
         style={{ background: `linear-gradient(to bottom, var(--theme-bg-from, #0a1410), var(--theme-bg-to, #0f3d2c))` }}>
          {(round?.trick_history?.length ?? 0) > 0 && (
@@ -1673,6 +1756,7 @@ const round_breakdown = allRounds.map((r) => ({
     return (
       <>
       {showSpectatorWelcome && <SpectatorWelcome onDismiss={dismissSpectatorWelcome} />}
+      <SpectatorRequestsBox />
       <main className="min-h-screen text-emerald-50 px-3 py-5 flex flex-col"
         style={{ background: `linear-gradient(to bottom, var(--theme-bg-from, #0a1410), var(--theme-bg-to, #0f3d2c))` }}>
        {(round?.trick_history?.length ?? 0) > 0 && (
