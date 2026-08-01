@@ -82,7 +82,8 @@ const [players, setPlayers] = useState([]);
   const [iAmSpectator, setIAmSpectator] = useState(false);
   const [showSpectatorWelcome, setShowSpectatorWelcome] = useState(false);
   const [showTricksWon, setShowTricksWon] = useState(false);
-  const [showVictoryEgg, setShowVictoryEgg] = useState(false);
+const [showVictoryEgg, setShowVictoryEgg] = useState(false);
+const [showSpectatorList, setShowSpectatorList] = useState(false);
   const bidDebounceRef = useRef(null);
   const localBidRef = useRef(null); // tracks my optimistic bid value, ignores stale realtime updates
   
@@ -1067,15 +1068,65 @@ function SpectatorsWatchingBox() {
   const spectatorNames = approvedSpectators.map((p) => p.name).join(', ');
 
   return (
-    <div
-      className="fixed top-5 left-16 z-40 text-xl"
-      title={`Watching: ${spectatorNames}`}
-      aria-label={`Watching: ${spectatorNames}`}
-    >
-      👁
+    <div className="fixed top-[13.25rem] right-3 z-40">
+      <button
+        type="button"
+        onClick={() => setShowSpectatorList((v) => !v)}
+        title={`Watching: ${spectatorNames}`}
+        aria-label={`Watching: ${spectatorNames}`}
+        className="relative w-11 h-11 rounded-full bg-[#0f1d18] border border-emerald-500/70 shadow-lg flex items-center justify-center hover:bg-[#14271f] active:scale-95 transition"
+        style={{
+          boxShadow:
+            '0 0 0 1px rgba(52, 211, 153, 0.25), 0 0 16px rgba(52, 211, 153, 0.45)',
+          animation: 'spectatorEyeGlow 1.8s ease-in-out infinite',
+        }}
+      >
+        <span className="text-lg drop-shadow-[0_0_8px_rgba(110,231,183,0.9)]">
+          👁️
+        </span>
+
+        <span className="absolute -top-1 -right-1 min-w-[17px] h-[17px] px-1 rounded-full bg-amber-300 text-[#07100c] text-[10px] font-bold flex items-center justify-center">
+          {approvedSpectators.length}
+        </span>
+      </button>
+
+      {showSpectatorList && (
+        <div className="absolute right-0 mt-2 w-52 bg-[#0f1d18]/98 border border-emerald-700/60 rounded-2xl p-3 shadow-2xl">
+          <p className="text-[10px] uppercase tracking-widest text-emerald-200/50 mb-2">
+            Watching
+          </p>
+
+          <div className="space-y-2">
+            {approvedSpectators.map((p) => (
+              <div key={p.id} className="flex items-center gap-2 min-w-0">
+                <Avatar avatarId={p.avatar_id} playerName={p.name} size="xs" />
+                <span className="text-xs text-emerald-100 truncate">
+                  {p.name}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <style jsx>{`
+        @keyframes spectatorEyeGlow {
+          0%,
+          100% {
+            box-shadow:
+              0 0 0 1px rgba(52, 211, 153, 0.25),
+              0 0 12px rgba(52, 211, 153, 0.35);
+          }
+          50% {
+            box-shadow:
+              0 0 0 1px rgba(251, 191, 36, 0.35),
+              0 0 22px rgba(251, 191, 36, 0.55);
+          }
+        }
+      `}</style>
     </div>
   );
-} 
+}
 
   if (loading) {
     return <main className="min-h-screen flex items-center justify-center bg-[#0a1410] text-emerald-200">Loading...</main>;
