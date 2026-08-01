@@ -1064,29 +1064,18 @@ function SpectatorRequestsBox() {
 function SpectatorsWatchingBox() {
   if (approvedSpectators.length === 0) return null;
 
-  return (
-    <div className="fixed bottom-4 left-3 right-3 z-30 max-w-md mx-auto bg-[#0f1d18]/95 border border-emerald-700/50 rounded-2xl px-4 py-3 shadow-2xl">
-      <p className="text-[10px] uppercase tracking-widest text-emerald-200/50 mb-2 text-center">
-        Watching this game
-      </p>
+  const spectatorNames = approvedSpectators.map((p) => p.name).join(', ');
 
-      <div className="flex items-center justify-center gap-2 flex-wrap">
-        {approvedSpectators.map((p) => (
-          <div
-            key={p.id}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-950/60 border border-emerald-800/60"
-          >
-            <Avatar avatarId={p.avatar_id} playerName={p.name} size="xs" />
-            <span className="text-xs text-emerald-100 truncate max-w-[120px]">
-              {p.name}
-            </span>
-            <span className="text-xs text-emerald-300/70">👁</span>
-          </div>
-        ))}
-      </div>
+  return (
+    <div
+      className="fixed top-5 left-16 z-40 text-xl"
+      title={`Watching: ${spectatorNames}`}
+      aria-label={`Watching: ${spectatorNames}`}
+    >
+      👁
     </div>
   );
-}
+} 
 
   if (loading) {
     return <main className="min-h-screen flex items-center justify-center bg-[#0a1410] text-emerald-200">Loading...</main>;
