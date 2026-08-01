@@ -325,6 +325,23 @@ const isTeamMode = game?.mode === 'team';
 const direction = game?.direction ?? 'asc';
 const cardsThisRound = game ? cardsForRound(game.current_round, game.max_rounds, direction) : 0;
 
+function getNextActiveSeatIndex(fromSeatIndex) {
+  const ordered = [...seatedPlayers].sort(
+    (a, b) => (a.seat_index ?? 0) - (b.seat_index ?? 0)
+  );
+
+  if (ordered.length === 0) return 0;
+
+  const currentPos = ordered.findIndex((s) => s.seat_index === fromSeatIndex);
+
+  if (currentPos === -1) {
+    const nextSeat = ordered.find((s) => (s.seat_index ?? 0) > fromSeatIndex);
+    return nextSeat?.seat_index ?? ordered[0].seat_index ?? 0;
+  }
+
+  return ordered[(currentPos + 1) % ordered.length].seat_index ?? 0;
+}
+
 
   useEffect(() => {
     async function dealIfNeeded() {
@@ -567,7 +584,7 @@ async function handleLockIndivBid() {
 
     const card = theirHand[pickIdx];
     const newHand = [...theirHand.slice(0, pickIdx), ...theirHand.slice(pickIdx + 1)];
-    const nextPlayerSeat = (targetSeat.seat_index + 1) % N;
+    const nextPlayerSeat = getNextActiveSeatIndex(targetSeat.seat_index);
 
     // Use the atomic RPC to avoid races with other players
     const { error } = await supabase.rpc('play_card', {
@@ -593,7 +610,7 @@ async function handleLockIndivBid() {
 
     const card = myHand[handIdx];
     const newHand = [...myHand.slice(0, handIdx), ...myHand.slice(handIdx + 1)];
-    const nextPlayerSeat = (mySeatIdx + 1) % N;
+    const nextPlayerSeat = getNextActiveSeatIndex(mySeatIdx);
 
     // Optimistic UI — update locally first so card lands instantly
     const newTrickEntry = { player_id: me.playerId, seat_index: mySeatIdx, card };
