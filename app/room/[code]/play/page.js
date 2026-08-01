@@ -97,14 +97,14 @@ export default function PlayPage({ params }) {
  
   usePresence(me?.playerId);
   useHostPromotion(code, me?.playerId);
-  const stalePlayerIds = useStalePlayers(code);
+  const stalePlayerIds = useStalePlayers(code, 40);
   const sounds = useSounds();
   useRoomTheme(room);
   useBackButtonExit({ enabled: !loading });
 
   const otherPlayerIds = seats
-    .filter((s) => s.player_id !== me?.playerId)
-    .map((s) => s.player_id);
+  .filter((s) => !s.kicked_at && s.player_id !== me?.playerId)
+  .map((s) => s.player_id);
   const voice = useVoiceChat({
     roomCode: code,
     myPlayerId: me?.playerId,
@@ -144,7 +144,11 @@ export default function PlayPage({ params }) {
         supabase.from('players').select('id').eq('room_code', code).eq('is_host', true),
         supabase.from('game_seats').select('*').eq('game_id', gameId),
         supabase.from('players').select('id, name, avatar_id').eq('room_code', code),
-        supabase.from('players').select('is_spectator').eq('id', me.playerId).maybeSingle(),
+        supabase
+  .from('players')
+  .select('is_spectator, spectator_status')
+  .eq('id', me.playerId)
+  .maybeSingle(),
       ]);
 
       if (cancelled) return;
@@ -158,6 +162,23 @@ export default function PlayPage({ params }) {
           avatar_id: player?.avatar_id ?? null,
         };
       });
+
+      const myGameSeat = enrichedSeats.find((s) => s.player_id === me.playerId);
+
+if (!myPlayerRow || myGameSeat?.kicked_at) {
+  localStorage.removeItem(`spade-room-${code}`);
+  alert('You were removed from this match.');
+  router.push(`/room/${code}`);
+  return;
+}
+const waitingForApproval =
+  myPlayerRow?.is_spectator &&
+  (myPlayerRow?.spectator_status ?? 'approved') === 'pending';
+
+if (waitingForApproval) {
+  router.push(`/room/${code}`);
+  return;
+}
 
       const amSpectator = !!myPlayerRow?.is_spectator;
       const wasSpectatorBefore = sessionStorage.getItem(`spade-spectator-acknowledged-${code}`);
@@ -240,6 +261,30 @@ export default function PlayPage({ params }) {
           await refreshHandAndRound(room.current_game_id, g.current_round, me.playerId);
           await refreshAllHands(room.current_game_id, g.current_round);
         })
+
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'game_seats' },
+  async (payload) => {
+    if (cancelled) return;
+
+    const { data: roomNow } = await supabase
+      .from('rooms')
+      .select('current_game_id')
+      .eq('code', code)
+      .single();
+
+    const changedGameId = payload.new?.game_id ?? payload.old?.game_id;
+
+    if (!roomNow?.current_game_id || changedGameId !== roomNow.current_game_id) return;
+
+    await loadEverything();
+  }
+)
+.on('postgres_changes', { event: '*', schema: 'public', table: 'players', filter: `room_code=eq.${code}` },
+  async () => {
+    if (cancelled) return;
+    await loadEverything();
+  }
+)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `code=eq.${code}` },
         (payload) => {
           if (cancelled) return;
@@ -253,6 +298,16 @@ export default function PlayPage({ params }) {
     return () => { cancelled = true; supabase.removeChannel(channel); };
   }, [me, code, router]);
 
+  const iAmHost = me && hostId === me.playerId;
+const activeSeats = seats.filter((s) => !s.kicked_at);
+const mySeat = activeSeats.find((s) => s.player_id === me?.playerId);
+const myTeam = mySeat?.team_id ?? null;
+const seatedPlayers = activeSeats.filter((s) => s.seat_index != null);
+const N = seatedPlayers.length;
+const isTeamMode = game?.mode === 'team';
+const direction = game?.direction ?? 'asc';
+const cardsThisRound = game ? cardsForRound(game.current_round, game.max_rounds, direction) : 0;
+
 
   useEffect(() => {
     async function dealIfNeeded() {
@@ -265,7 +320,7 @@ export default function PlayPage({ params }) {
         .eq('game_id', game.id).eq('round_num', game.current_round);
       if (existing && existing.length > 0) return;
 
-      const seatedPlayers = seats.filter((s) => s.seat_index != null);
+      const seatedPlayers = activeSeats.filter((s) => s.seat_index != null);
       if (seatedPlayers.length === 0) return;
 
       const dealt = dealRound(seatedPlayers, cardsThisRound, game.deck_count);
@@ -292,16 +347,9 @@ export default function PlayPage({ params }) {
     }
     dealIfNeeded();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [game?.status, game?.current_round, hostId, me?.playerId, seats]);
+  }, [game?.status, game?.current_round, hostId, me?.playerId, activeSeats]);
 
-  const iAmHost = me && hostId === me.playerId;
-  const mySeat = seats.find((s) => s.player_id === me?.playerId);
-  const myTeam = mySeat?.team_id ?? null;
-  const seatedPlayers = seats.filter((s) => s.seat_index != null);
-  const N = seatedPlayers.length;
-  const isTeamMode = game?.mode === 'team';
-  const direction = game?.direction ?? 'asc';
-  const cardsThisRound = game ? cardsForRound(game.current_round, game.max_rounds, direction) : 0;
+  
 
   const starterSeatIdx = round?.bid_starter_seat_index ?? (N ? bidStarterSeatFor(game?.current_round ?? 1, N) : 0);
   const teamOrder = isTeamMode ? teamBiddingOrder(seatedPlayers, starterSeatIdx) : [];
@@ -429,6 +477,43 @@ async function handleLockIndivBid() {
   async function handleStartPlay() {
     await supabase.from('games').update({ status: 'playing' }).eq('id', game.id);
   }
+  async function handleKickInactiveDuringBidding(seat) {
+  if (!iAmHost || !game || game.status !== 'bidding') return;
+
+  const isStale = stalePlayerIds.has(seat.player_id);
+  if (!isStale) {
+    alert(`${seat.name} is still active. You can only kick after 40 seconds inactive.`);
+    return;
+  }
+
+  if (!confirm(`Kick ${seat.name}? They have been inactive for 40 seconds.`)) return;
+
+  await supabase
+    .from('game_seats')
+    .update({ kicked_at: new Date().toISOString() })
+    .eq('game_id', game.id)
+    .eq('player_id', seat.player_id);
+
+  await supabase
+    .from('players')
+    .delete()
+    .eq('id', seat.player_id);
+
+  const newBids = { ...(round?.bids || {}) };
+  const newLocked = { ...(round?.bids_locked || {}) };
+
+  delete newBids[seat.player_id];
+  delete newLocked[seat.player_id];
+
+  await supabase
+    .from('rounds')
+    .update({
+      bids: newBids,
+      bids_locked: newLocked,
+    })
+    .eq('game_id', game.id)
+    .eq('round_num', game.current_round);
+}
 
   // Host-only: play the disconnected player's lowest legal card for them.
   async function handleSkipTurn(targetSeat) {
@@ -1204,9 +1289,22 @@ const round_breakdown = allRounds.map((r) => ({
                         <span className="text-emerald-200/40 text-xs">Seat {seat.seat_index + 1}</span>
                         <Avatar avatarId={seat.avatar_id} playerName={seat.name} size="xs" />
                         <span className="font-medium text-sm truncate">{seat.name}</span>
-                        {isMe && <span className="text-xs text-emerald-200/50">(you)</span>}
+{isMe && <span className="text-xs text-emerald-200/50">(you)</span>}
+{stalePlayerIds.has(pid) && (
+  <span className="text-xs text-red-300">inactive</span>
+)}
                       </div>
-                      {isLocked && <span className="text-[10px] uppercase tracking-wider text-emerald-300 font-bold">✓ Locked</span>}
+                      <div className="flex items-center gap-2">
+  {iAmHost && !isMe && stalePlayerIds.has(pid) && (
+    <button
+      onClick={() => handleKickInactiveDuringBidding(seat)}
+      className="text-xs px-2 py-1 rounded bg-red-900/40 border border-red-500/40 text-red-200 hover:bg-red-900/70 transition"
+    >
+      kick
+    </button>
+  )}
+  {isLocked && <span className="text-[10px] uppercase tracking-wider text-emerald-300 font-bold">✓ Locked</span>}
+</div>
                     </div>
                     {isLocked ? (
                       <div className="text-center py-3">
@@ -1464,11 +1562,12 @@ const round_breakdown = allRounds.map((r) => ({
   }
   // ────── PLAYING VIEW ──────
   if (game?.status === 'playing') {
-    const currentSeatForPause = seats.find((s) => s.seat_index === currentPlayerSeatIdx);
-    const isCurrentPlayerStale =
-      currentSeatForPause &&
-      currentTrick.length < N &&
-      stalePlayerIds.has(currentSeatForPause.player_id);
+  const currentSeatForPause = seatedPlayers.find((s) => s.seat_index === currentPlayerSeatIdx);
+  const isCurrentPlayerStale =
+    currentSeatForPause &&
+    currentSeatForPause.player_id !== me?.playerId &&
+    currentTrick.length < N &&
+    stalePlayerIds.has(currentSeatForPause.player_id);
 
     // Spectator gets a special god-mode view (sees all hands face-up)
     if (iAmSpectator) {
@@ -1503,7 +1602,7 @@ const round_breakdown = allRounds.map((r) => ({
               <h1 className="text-lg font-serif italic text-amber-200">
                 {revealedWinner
                   ? `${seats.find((s) => s.player_id === revealedWinner.player_id)?.name} wins!`
-                  : `Waiting for ${seats.find((s) => s.seat_index === currentPlayerSeatIdx)?.name ?? '...'}`}
+                  : `Waiting for ${seatedPlayers.find((s) => s.seat_index === currentPlayerSeatIdx)?.name ?? '...'}`}
               </h1>
             </div>
 
@@ -1602,7 +1701,7 @@ const round_breakdown = allRounds.map((r) => ({
               {revealedWinner
                 ? `${seats.find((s) => s.player_id === revealedWinner.player_id)?.name} wins!`
                 : itsMyTurn ? 'Your turn'
-                : `Waiting for ${seats.find((s) => s.seat_index === currentPlayerSeatIdx)?.name ?? '...'}`}
+                : `Waiting for ${seatedPlayers.find((s) => s.seat_index === currentPlayerSeatIdx)?.name ?? '...'}`}
             </h1>
           </div>
 
@@ -1618,15 +1717,15 @@ const round_breakdown = allRounds.map((r) => ({
                   They appear to be offline.
                 </p>
               </div>
-              {iAmHost && (
-                <button
-                  onClick={() => handleSkipTurn(currentSeatForPause)}
-                  disabled={skipping}
-                  className="text-xs px-3 py-2 rounded-lg bg-amber-300 text-[#07100c] font-semibold hover:bg-amber-200 active:scale-95 transition disabled:opacity-50 whitespace-nowrap"
-                >
-                  {skipping ? 'Skipping...' : 'Skip turn'}
-                </button>
-              )}
+             {iAmHost && currentSeatForPause?.player_id !== me?.playerId && (
+  <button
+    onClick={() => handleSkipTurn(currentSeatForPause)}
+    disabled={skipping}
+    className="text-xs px-3 py-2 rounded-lg bg-amber-300 text-[#07100c] font-semibold hover:bg-amber-200 active:scale-95 transition disabled:opacity-50 whitespace-nowrap"
+  >
+    {skipping ? 'Skipping...' : 'Skip turn'}
+  </button>
+)}
             </div>
           )}
 

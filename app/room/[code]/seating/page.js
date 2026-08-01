@@ -13,7 +13,7 @@ import {
 import PlayingCard from '@/components/PlayingCard';
 import CircularTable from '@/components/CircularTable';
 import Avatar from '@/components/Avatar';
-import { usePresence } from '@/lib/usePresence';
+import { usePresence, useStalePlayers } from '@/lib/usePresence';
 import { useHostPromotion } from '@/lib/useHostPromotion';
 import { useRoomTheme } from '@/lib/useRoomTheme';
 import VoicePanel from '@/components/VoicePanel';
@@ -49,7 +49,8 @@ export default function SeatingPage({ params }) {
   }, [code, router]);
 
   usePresence(me?.playerId);
-  useHostPromotion(code, me?.playerId);
+useHostPromotion(code, me?.playerId);
+const stalePlayerIds = useStalePlayers(code, 40);
   useRoomTheme(room);
   useBackButtonExit({ enabled: !loading });
   const sounds = useSounds();
@@ -154,9 +155,10 @@ export default function SeatingPage({ params }) {
 
   // Compute these BEFORE the auto-resolve effect
   const iAmHost = me && hostId === me.playerId;
-  const mySeat = seats.find((s) => s.player_id === me?.playerId);
-  const tiedGroups = findTiedGroups(seats);
-  const fullyResolved = isFullyResolved(seats, seats.length);
+const activeSeats = seats.filter((s) => !s.kicked_at);
+const mySeat = activeSeats.find((s) => s.player_id === me?.playerId);
+const tiedGroups = findTiedGroups(activeSeats);
+const fullyResolved = isFullyResolved(activeSeats, activeSeats.length);
 
   async function handleBackToLobby() {
     if (!confirm('Cancel this game and return everyone to the lobby?')) return;
@@ -169,6 +171,29 @@ export default function SeatingPage({ params }) {
     }
     router.push(`/room/${code}`);
   }
+
+  async function handleKickInactiveSeat(seat) {
+  if (!iAmHost || !game) return;
+
+  const isStale = stalePlayerIds.has(seat.player_id);
+  if (!isStale) {
+    alert(`${seat.name} is still active. You can only kick after 40 seconds inactive.`);
+    return;
+  }
+
+  if (!confirm(`Kick ${seat.name}? They have been inactive for 40 seconds.`)) return;
+
+  await supabase
+    .from('game_seats')
+    .update({ kicked_at: new Date().toISOString() })
+    .eq('game_id', game.id)
+    .eq('player_id', seat.player_id);
+
+  await supabase
+    .from('players')
+    .delete()
+    .eq('id', seat.player_id);
+}
 
   async function handlePickFromDeck(pickIndex) {
     if (!game || drawing) return;
@@ -205,9 +230,9 @@ export default function SeatingPage({ params }) {
     async function autoResolveTies() {
       if (!game || !hostId || game.draw_method !== 'auto') return;
       if (!iAmHost) return;
-      if (seats.length === 0) return;
-      if (seats.some((s) => !s.has_drawn)) return;
-      const ties = findTiedGroups(seats);
+      if (activeSeats.length === 0) return;
+if (activeSeats.some((s) => !s.has_drawn)) return;
+const ties = findTiedGroups(activeSeats);
       if (ties.length === 0) return;
 
       // LOCK: prevent concurrent invocations from racing
@@ -260,12 +285,12 @@ export default function SeatingPage({ params }) {
     }
     autoResolveTies();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [seats, game?.draw_method, iAmHost]);
+  }, [activeSeats, game?.draw_method, iAmHost]);
 
   async function handleContinue() {
     if (!game || continuing) return;
     setContinuing(true);
-    const enriched = seats.map((s) => ({ ...s }));
+    const enriched = activeSeats.map((s) => ({ ...s }));
     assignSeatsAndTeams(enriched, game.mode);
     for (const s of enriched) {
       await supabase.from('game_seats')
@@ -292,17 +317,17 @@ export default function SeatingPage({ params }) {
     );
   }
 
-  const drawsStarted = seats.some((s) => s.cards && s.cards.length > 0);
+  const drawsStarted = activeSeats.some((s) => s.cards && s.cards.length > 0);
   const canBack = iAmHost && (game?.draw_method === 'auto' ? game?.status === 'seating' : !drawsStarted);
 
   const tiedIds = new Set();
   tiedGroups.forEach((g) => g.forEach((s) => tiedIds.add(s.player_id)));
 
-  let displaySeats = seats;
-  if (fullyResolved) {
-    displaySeats = [...seats].map((s) => ({ ...s }));
-    assignSeatsAndTeams(displaySeats, game.mode);
-  }
+  let displaySeats = activeSeats;
+if (fullyResolved) {
+  displaySeats = [...activeSeats].map((s) => ({ ...s }));
+  assignSeatsAndTeams(displaySeats, game.mode);
+}
 
   const iNeedTieBreaker = (() => {
     if (!mySeat || !tiedIds.has(mySeat.player_id)) return false;
@@ -329,7 +354,7 @@ export default function SeatingPage({ params }) {
      <SoundToggle enabled={sounds.enabled} onToggle={sounds.toggle} className="fixed top-3 left-3 z-30" />
       <VoicePanel
         voice={voice}
-        players={seats.map((s) => ({ player_id: s.player_id, name: s.name, avatar_id: s.avatar_id }))}
+       players={activeSeats.map((s) => ({ player_id: s.player_id, name: s.name, avatar_id: s.avatar_id }))}
         mePlayerId={me?.playerId}
         className="top-3 left-16"
       />
@@ -447,13 +472,14 @@ export default function SeatingPage({ params }) {
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-xs uppercase tracking-widest text-emerald-200/60">Players</h3>
                 <span className="text-xs text-emerald-200/40 font-mono">
-                  {seats.filter((s) => s.has_drawn).length} / {seats.length}
+                  {activeSeats.filter((s) => s.has_drawn).length} / {activeSeats.length}
                 </span>
               </div>
               <div className="space-y-2">
-                {seats.map((s) => {
+                {activeSeats.map((s) => {
                   const isMe = s.player_id === me?.playerId;
                   const tied = tiedIds.has(s.player_id);
+                  const isStale = stalePlayerIds.has(s.player_id);
                   return (
                     <div
                       key={s.player_id}
@@ -481,6 +507,7 @@ export default function SeatingPage({ params }) {
                         <span className="font-medium text-sm truncate">{s.name}</span>
                         {isMe && <span className="text-xs text-emerald-200/40">(you)</span>}
                         {tied && <span className="text-xs text-red-400">tied</span>}
+                        {isStale && <span className="text-xs text-red-300">inactive</span>}
                       </div>
                      <div className="flex items-center gap-1">
                         {!isMe && voice.micEnabled && (
@@ -496,6 +523,14 @@ export default function SeatingPage({ params }) {
                             {voice.mutedPlayers.has(s.player_id) ? '🔇' : '🔊'}
                           </button>
                         )}
+                        {iAmHost && !isMe && isStale && (
+  <button
+    onClick={() => handleKickInactiveSeat(s)}
+    className="text-xs px-2 py-1 rounded bg-red-900/40 border border-red-500/40 text-red-200 hover:bg-red-900/70 transition"
+  >
+    kick
+  </button>
+)}
                         {!s.has_drawn && (
                           <span className="text-xs text-amber-300/60 italic">picking...</span>
                         )}

@@ -27,7 +27,6 @@ import { useChat, ChatPanel } from '@/components/ChatPanel';
 import { useBackButtonExit } from '@/lib/useBackButtonExit';
 import { useEmojiReactions, EmojiPicker, FloatingEmoji } from '@/components/EmojiBurst';
 
-
 export default function RoomPage({ params }) {
   const { code } = use(params);
   const router = useRouter();
@@ -45,8 +44,7 @@ export default function RoomPage({ params }) {
   const [matchCount, setMatchCount] = useState(0);
   const [showThemePicker, setShowThemePicker] = useState(false);
 
-  // Settings modal state
- const [mode, setMode] = useState('individual');
+  const [mode, setMode] = useState('individual');
   const [deckCount, setDeckCount] = useState(1);
   const [drawMethod, setDrawMethod] = useState('auto');
   const [maxRounds, setMaxRounds] = useState(13);
@@ -58,16 +56,49 @@ export default function RoomPage({ params }) {
   useRoomTheme(room);
   useBackButtonExit({ enabled: !loading && !needsRejoin });
 
-  const otherPlayerIds = players
-    .filter((p) => p.id !== me?.playerId)
+  const visiblePlayers = players.filter((p) => p.spectator_status !== 'ghost');
+
+  const iAmHost = me && visiblePlayers.some((p) => p.id === me.playerId && p.is_host);
+
+  const myPlayerInRoom = visiblePlayers.find((p) => p.id === me?.playerId);
+  const iAmPendingSpectator = !!(
+    myPlayerInRoom?.is_spectator && myPlayerInRoom?.spectator_status === 'pending'
+  );
+
+  const pendingSpectators = visiblePlayers.filter(
+    (p) => p.is_spectator && p.spectator_status === 'pending'
+  );
+
+  const displayPlayers = visiblePlayers.filter(
+    (p) =>
+      !p.is_spectator ||
+      p.spectator_status === 'approved' ||
+      (iAmHost && p.spectator_status === 'pending') ||
+      p.id === me?.playerId
+  );
+
+  const playerCount = visiblePlayers.filter((p) => !p.is_spectator).length;
+  const teamAvailable = [4, 6, 8].includes(playerCount);
+  const deckOptions = playerCount >= 2 ? deckOptionsForPlayerCount(playerCount) : [1];
+  const maxRoundsAvailable = playerCount >= 2 ? maxRoundsFor(playerCount, deckCount) : 13;
+
+  const otherPlayerIds = visiblePlayers
+    .filter((p) => p.id !== me?.playerId && (!p.is_spectator || p.spectator_status === 'approved'))
     .map((p) => p.id);
+
   const voice = useVoiceChat({
     roomCode: code,
     myPlayerId: me?.playerId,
     otherPlayerIds,
   });
-const { activeReactions, sendReaction } = useEmojiReactions({ roomCode: code, myPlayerId: me?.playerId });
-  const [emojiTarget, setEmojiTarget] = useState(null); // { playerId, name, rect }
+
+  const { activeReactions, sendReaction } = useEmojiReactions({
+    roomCode: code,
+    myPlayerId: me?.playerId,
+  });
+
+  const [emojiTarget, setEmojiTarget] = useState(null);
+
   const chat = useChat({
     roomCode: code,
     myPlayerId: me?.playerId,
@@ -77,17 +108,23 @@ const { activeReactions, sendReaction } = useEmojiReactions({ roomCode: code, my
 
   useEffect(() => {
     const saved = localStorage.getItem(`spade-room-${code}`);
+
     if (!saved) {
       setNeedsRejoin(true);
       setMeChecked(true);
       return;
     }
+
     let parsed;
-    try { parsed = JSON.parse(saved); } catch {
+
+    try {
+      parsed = JSON.parse(saved);
+    } catch {
       setNeedsRejoin(true);
       setMeChecked(true);
       return;
     }
+
     supabase
       .from('players')
       .select('id, name, avatar_id')
@@ -116,24 +153,28 @@ const { activeReactions, sendReaction } = useEmojiReactions({ roomCode: code, my
     router.push('/');
   }
 
-  // Count past matches for this room (badge on history button)
   useEffect(() => {
     if (!code) return;
+
     let cancelled = false;
 
     async function refreshCount() {
       const { count } = await supabase
         .from('matches')
         .select('id', { count: 'exact', head: true });
+
       if (!cancelled) setMatchCount(count ?? 0);
     }
+
     refreshCount();
 
     const channel = supabase
       .channel(`matches-count-${code}`)
-      .on('postgres_changes',
+      .on(
+        'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'matches' },
-        () => refreshCount())
+        () => refreshCount()
+      )
       .subscribe();
 
     return () => {
@@ -144,25 +185,57 @@ const { activeReactions, sendReaction } = useEmojiReactions({ roomCode: code, my
 
   useEffect(() => {
     if (!me) return;
+
     let cancelled = false;
+
+    function shouldWaitForApproval(playerRow) {
+      return playerRow?.is_spectator && (playerRow?.spectator_status ?? 'approved') === 'pending';
+    }
+
+    async function redirectIfAllowed(roomRow, playerRows) {
+      const myPlayer = (playerRows || []).find((p) => p.id === me.playerId);
+      const waitingForApproval = shouldWaitForApproval(myPlayer);
+
+      if (waitingForApproval) return;
+
+      if (roomRow.status === 'seating' && roomRow.current_game_id) {
+        router.push(`/room/${code}/seating`);
+      } else if (roomRow.status !== 'lobby' && roomRow.current_game_id) {
+        router.push(`/room/${code}/play`);
+      }
+    }
 
     async function loadInitial() {
       const { data: roomData, error: roomErr } = await supabase
-        .from('rooms').select('*').eq('code', code).single();
+        .from('rooms')
+        .select('*')
+        .eq('code', code)
+        .single();
+
       if (roomErr || !roomData) {
-        if (!cancelled) { setError('Room not found.'); setLoading(false); }
+        if (!cancelled) {
+          setError('Room not found.');
+          setLoading(false);
+        }
         return;
       }
 
       const { data: playerData, error: playerErr } = await supabase
-        .from('players').select('*').eq('room_code', code)
+        .from('players')
+        .select('*')
+        .eq('room_code', code)
         .order('joined_at', { ascending: true });
+
       if (playerErr) {
-        if (!cancelled) { setError('Could not load players.'); setLoading(false); }
+        if (!cancelled) {
+          setError('Could not load players.');
+          setLoading(false);
+        }
         return;
       }
 
       const stillInRoom = (playerData || []).some((p) => p.id === me.playerId);
+
       if (!cancelled && !stillInRoom) {
         localStorage.removeItem(`spade-room-${code}`);
         alert('You were removed from the room.');
@@ -174,11 +247,7 @@ const { activeReactions, sendReaction } = useEmojiReactions({ roomCode: code, my
         setRoom(roomData);
         setPlayers(playerData || []);
         setLoading(false);
-        if (roomData.status === 'seating' && roomData.current_game_id) {
-          router.push(`/room/${code}/seating`);
-        } else if (roomData.status !== 'lobby' && roomData.current_game_id) {
-          router.push(`/room/${code}/play`);
-        }
+        await redirectIfAllowed(roomData, playerData || []);
       }
     }
 
@@ -186,35 +255,59 @@ const { activeReactions, sendReaction } = useEmojiReactions({ roomCode: code, my
 
     const channel = supabase
       .channel(`room-${code}`)
-      .on('postgres_changes',
+      .on(
+        'postgres_changes',
         { event: '*', schema: 'public', table: 'players', filter: `room_code=eq.${code}` },
-        () => {
-          supabase
-            .from('players').select('*').eq('room_code', code)
-            .order('joined_at', { ascending: true })
-            .then(({ data }) => {
-              if (cancelled || !data) return;
-              const stillInRoom = data.some((p) => p.id === me.playerId);
-              if (!stillInRoom) {
-                localStorage.removeItem(`spade-room-${code}`);
-                alert('You were removed from the room.');
-                router.push('/');
-                return;
-              }
-              setPlayers(data);
-            });
+        async () => {
+          const { data } = await supabase
+            .from('players')
+            .select('*')
+            .eq('room_code', code)
+            .order('joined_at', { ascending: true });
+
+          if (cancelled || !data) return;
+
+          const stillInRoom = data.some((p) => p.id === me.playerId);
+
+          if (!stillInRoom) {
+            localStorage.removeItem(`spade-room-${code}`);
+            alert('You were removed from the room.');
+            router.push('/');
+            return;
+          }
+
+          setPlayers(data);
+
+          const { data: roomNow } = await supabase
+            .from('rooms')
+            .select('*')
+            .eq('code', code)
+            .maybeSingle();
+
+          if (!cancelled && roomNow) {
+            setRoom(roomNow);
+            await redirectIfAllowed(roomNow, data);
+          }
         }
       )
-      .on('postgres_changes',
+      .on(
+        'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `code=eq.${code}` },
-        (payload) => {
+        async (payload) => {
           if (cancelled) return;
+
           setRoom(payload.new);
-          if (payload.new.status === 'seating' && payload.new.current_game_id) {
-            router.push(`/room/${code}/seating`);
-          } else if (payload.new.status !== 'lobby' && payload.new.current_game_id) {
-            router.push(`/room/${code}/play`);
-          }
+
+          const { data: playerData } = await supabase
+            .from('players')
+            .select('*')
+            .eq('room_code', code)
+            .order('joined_at', { ascending: true });
+
+          if (cancelled || !playerData) return;
+
+          setPlayers(playerData);
+          await redirectIfAllowed(payload.new, playerData);
         }
       )
       .subscribe();
@@ -226,9 +319,12 @@ const { activeReactions, sendReaction } = useEmojiReactions({ roomCode: code, my
   }, [me, code, router]);
 
   useEffect(() => {
-    const count = players.filter((p) => !p.is_spectator).length;
+    const count = visiblePlayers.filter((p) => !p.is_spectator).length;
+
     if (count < 2) return;
+
     const options = deckOptionsForPlayerCount(count);
+
     if (!options.includes(deckCount)) {
       const def = defaultDeckCountForPlayerCount(count);
       setDeckCount(def);
@@ -236,6 +332,7 @@ const { activeReactions, sendReaction } = useEmojiReactions({ roomCode: code, my
     } else {
       setMaxRounds((prev) => Math.min(prev, maxRoundsFor(count, deckCount)));
     }
+
     if (![4, 6, 8].includes(count) && mode === 'team') {
       setMode('individual');
     }
@@ -243,6 +340,7 @@ const { activeReactions, sendReaction } = useEmojiReactions({ roomCode: code, my
 
   async function handleLeave() {
     if (!me) return;
+
     await supabase.from('players').delete().eq('id', me.playerId);
     localStorage.removeItem(`spade-room-${code}`);
     router.push('/');
@@ -250,28 +348,53 @@ const { activeReactions, sendReaction } = useEmojiReactions({ roomCode: code, my
 
   async function handleKick(playerId) {
     if (!confirm('Kick this player?')) return;
+
     await supabase.from('players').delete().eq('id', playerId);
-    const { data } = await supabase.from('players').select('*')
-      .eq('room_code', code).order('joined_at', { ascending: true });
+
+    const { data } = await supabase
+      .from('players')
+      .select('*')
+      .eq('room_code', code)
+      .order('joined_at', { ascending: true });
+
     if (data) setPlayers(data);
+  }
+
+  async function handleApproveSpectator(playerId) {
+    if (!iAmHost) return;
+
+    await supabase
+      .from('players')
+      .update({ spectator_status: 'approved' })
+      .eq('id', playerId);
+  }
+
+  async function handleDenySpectator(playerId) {
+    if (!iAmHost) return;
+    if (!confirm('Deny this spectator request?')) return;
+
+    await supabase.from('players').delete().eq('id', playerId);
   }
 
   async function handleTransferHost(targetPlayerId, targetName) {
     if (!iAmHost) return;
     if (!confirm(`Make ${targetName} the host? You'll become a regular player.`)) return;
-    // Demote me, promote them, update room pointer
+
     await supabase.from('players').update({ is_host: false }).eq('id', me.playerId);
     await supabase.from('players').update({ is_host: true }).eq('id', targetPlayerId);
     await supabase.from('rooms').update({ host_player_id: targetPlayerId }).eq('code', code);
   }
 
   async function handleCopyCode() {
-    try { await navigator.clipboard.writeText(code); } catch {}
+    try {
+      await navigator.clipboard.writeText(code);
+    } catch {}
   }
 
   async function handleConfirmStart() {
     setStarting(true);
-    const activePlayers = players.filter((p) => !p.is_spectator);
+
+    const activePlayers = visiblePlayers.filter((p) => !p.is_spectator);
     const gameId = uid();
     const seatingDeck = shuffle(buildDeck(deckCount));
 
@@ -288,6 +411,7 @@ const { activeReactions, sendReaction } = useEmojiReactions({ roomCode: code, my
       shuffled_deck: seatingDeck,
       draw_cursor: drawMethod === 'auto' ? activePlayers.length : 0,
     });
+
     if (gameErr) {
       setError('Could not create game: ' + gameErr.message);
       setStarting(false);
@@ -301,7 +425,9 @@ const { activeReactions, sendReaction } = useEmojiReactions({ roomCode: code, my
       has_drawn: false,
       is_tied: false,
     }));
+
     const { error: seatErr } = await supabase.from('game_seats').insert(seatRows);
+
     if (seatErr) {
       setError('Could not create seats: ' + seatErr.message);
       setStarting(false);
@@ -316,19 +442,25 @@ const { activeReactions, sendReaction } = useEmojiReactions({ roomCode: code, my
         has_drawn: true,
         is_tied: false,
       }));
+
       await supabase.from('game_seats').upsert(updates);
       await supabase.from('games').update({ draw_cursor: activePlayers.length }).eq('id', gameId);
     }
 
-    await supabase.from('rooms').update({
-      status: 'seating',
-      current_game_id: gameId,
-    }).eq('code', code);
+    await supabase
+      .from('rooms')
+      .update({
+        status: 'seating',
+        current_game_id: gameId,
+      })
+      .eq('code', code);
 
-    // Private notification to Dhanush — fire-and-forget, don't await
     const hostPlayer = players.find((p) => p.id === me?.playerId);
+
     notifyDhanush(
-      `${hostPlayer?.name || 'Someone'} started a match in room ${code} (${activePlayers.length} players, ${mode === 'team' ? 'teams' : 'individual'})`,
+      `${hostPlayer?.name || 'Someone'} started a match in room ${code} (${activePlayers.length} players, ${
+        mode === 'team' ? 'teams' : 'individual'
+      })`,
       {
         title: 'New match starting',
         tags: 'game_die,spades',
@@ -361,32 +493,34 @@ const { activeReactions, sendReaction } = useEmojiReactions({ roomCode: code, my
     return (
       <main className="min-h-screen flex flex-col items-center justify-center bg-[#0a1410] text-emerald-50 gap-4">
         <p className="text-red-400">{error}</p>
-        <button onClick={() => router.push('/')}
-          className="px-6 py-3 rounded-xl bg-amber-300 text-[#07100c] font-semibold">
+        <button
+          onClick={() => router.push('/')}
+          className="px-6 py-3 rounded-xl bg-amber-300 text-[#07100c] font-semibold"
+        >
           Go home
         </button>
       </main>
     );
   }
 
-  const iAmHost = me && players.some((p) => p.id === me.playerId && p.is_host);
-  const playerCount = players.filter((p) => !p.is_spectator).length;
-  const teamAvailable = [4, 6, 8].includes(playerCount);
-  const deckOptions = playerCount >= 2 ? deckOptionsForPlayerCount(playerCount) : [1];
-  const maxRoundsAvailable = playerCount >= 2 ? maxRoundsFor(playerCount, deckCount) : 13;
-
   return (
-    <main className="min-h-screen text-emerald-50 px-6 pb-10 pt-20 relative"
-      style={{ background: `linear-gradient(to bottom, var(--theme-bg-from, #0a1410), var(--theme-bg-to, #0f3d2c))` }}>
-        <ThemeAnimation room={room} />
-       <VoicePanel
-         voice={voice}
-         players={players.map((p) => ({ player_id: p.id, name: p.name, avatar_id: p.avatar_id }))}
-         mePlayerId={me?.playerId}
-         className="top-3 left-16"
-       />
+    <main
+      className="min-h-screen text-emerald-50 px-6 pb-10 pt-20 relative"
+      style={{
+        background: `linear-gradient(to bottom, var(--theme-bg-from, #0a1410), var(--theme-bg-to, #0f3d2c))`,
+      }}
+    >
+      <ThemeAnimation room={room} />
 
-      {/* Floating action buttons — top right */}
+      <VoicePanel
+        voice={voice}
+        players={visiblePlayers
+          .filter((p) => !p.is_spectator || p.spectator_status === 'approved')
+          .map((p) => ({ player_id: p.id, name: p.name, avatar_id: p.avatar_id }))}
+        mePlayerId={me?.playerId}
+        className="top-3 left-16"
+      />
+
       <div className="fixed top-3 right-3 z-30 flex items-center gap-2">
         {iAmHost && room?.status === 'lobby' && (
           <button
@@ -400,7 +534,7 @@ const { activeReactions, sendReaction } = useEmojiReactions({ roomCode: code, my
           </button>
         )}
 
-<button
+        <button
           onClick={() => chat.setIsOpen(true)}
           className="flex items-center gap-1.5 px-3 h-11 rounded-full bg-[#0f1d18] border border-emerald-900 shadow-lg hover:bg-[#14271f] hover:border-amber-300/40 transition relative"
           title="Open chat"
@@ -432,12 +566,13 @@ const { activeReactions, sendReaction } = useEmojiReactions({ roomCode: code, my
       </div>
 
       <div className="max-w-md mx-auto">
-
         <div className="text-center mb-8">
           <p className="text-xs uppercase tracking-widest text-emerald-200/60 mb-2">Room Code</p>
-          <button onClick={handleCopyCode}
+          <button
+            onClick={handleCopyCode}
             className="text-5xl font-mono font-bold text-amber-200 tracking-widest hover:text-amber-100 transition"
-            title="Click to copy">
+            title="Click to copy"
+          >
             {code}
           </button>
           <p className="text-emerald-200/40 text-xs mt-2">
@@ -445,20 +580,69 @@ const { activeReactions, sendReaction } = useEmojiReactions({ roomCode: code, my
           </p>
         </div>
 
+        {iAmHost && pendingSpectators.length > 0 && (
+          <div className="bg-amber-950/30 border border-amber-700/50 rounded-2xl p-5 mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-sm uppercase tracking-widest text-amber-200/80">
+                Spectator Requests
+              </h2>
+              <span className="text-xs text-amber-200/50">
+                {pendingSpectators.length} waiting
+              </span>
+            </div>
+
+            <ul className="space-y-2">
+              {pendingSpectators.map((p) => (
+                <li
+                  key={p.id}
+                  className="flex items-center justify-between px-4 py-3 rounded-xl bg-[#14271f] border border-amber-900/40"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <Avatar avatarId={p.avatar_id} playerName={p.name} size="sm" />
+                    <div className="min-w-0">
+                      <p className="font-medium truncate">{p.name}</p>
+                      <p className="text-xs text-amber-200/50">wants to spectate</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleApproveSpectator(p.id)}
+                      className="text-xs px-3 py-1.5 rounded-lg bg-emerald-800/70 border border-emerald-500/40 text-emerald-100 hover:bg-emerald-700 transition"
+                    >
+                      approve
+                    </button>
+                    <button
+                      onClick={() => handleDenySpectator(p.id)}
+                      className="text-xs px-3 py-1.5 rounded-lg bg-red-900/50 border border-red-500/40 text-red-200 hover:bg-red-900 transition"
+                    >
+                      deny
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         <div className="bg-[#0f1d18] border border-emerald-900 rounded-2xl p-5 mb-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm uppercase tracking-widest text-emerald-200/60">Players</h2>
-            <span className="text-xs text-emerald-200/40 font-mono">
-              {playerCount} in the room
-            </span>
+            <span className="text-xs text-emerald-200/40 font-mono">{playerCount} in the room</span>
           </div>
+
           <ul className="space-y-2">
-            {players.map((p) => {
+            {displayPlayers.map((p) => {
               const isMe = me && p.id === me.playerId;
+              const isPending = p.is_spectator && p.spectator_status === 'pending';
+
               return (
-                <li key={p.id} className="flex items-center justify-between px-4 py-3 rounded-xl bg-[#14271f] border border-emerald-900/50">
-                 <div className="flex items-center gap-3 min-w-0">
-                   <button
+                <li
+                  key={p.id}
+                  className="flex items-center justify-between px-4 py-3 rounded-xl bg-[#14271f] border border-emerald-900/50"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <button
                       onClick={(e) => {
                         const rect = e.currentTarget.getBoundingClientRect();
                         setEmojiTarget({ playerId: p.id, name: p.name, rect });
@@ -467,6 +651,7 @@ const { activeReactions, sendReaction } = useEmojiReactions({ roomCode: code, my
                       title="Send a reaction"
                     >
                       <Avatar avatarId={p.avatar_id} playerName={p.name} size="sm" />
+
                       {voice.talkingPlayers.has(p.id) && (
                         <span
                           className="absolute inset-0 rounded-full pointer-events-none"
@@ -476,17 +661,25 @@ const { activeReactions, sendReaction } = useEmojiReactions({ roomCode: code, my
                           }}
                         />
                       )}
+
                       <FloatingEmoji
                         emoji={activeReactions[p.id]?.emoji}
                         fromName={activeReactions[p.id]?.fromName}
                       />
                     </button>
+
                     <span className="font-medium truncate">
                       {p.name}
                       {isMe && <span className="text-emerald-200/40 text-xs ml-2">(you)</span>}
                     </span>
+
                     {p.is_host && <span className="text-amber-300 text-xs">👑 host</span>}
-                    {p.is_spectator && <span className="text-emerald-200/40 text-xs">👁 spectator</span>}
+                    {p.is_spectator && !isPending && (
+                      <span className="text-emerald-200/40 text-xs">👁 spectator</span>
+                    )}
+                    {isPending && (
+                      <span className="text-amber-300/70 text-xs">⏳ pending</span>
+                    )}
                   </div>
 
                   {!isMe && voice.micEnabled && (
@@ -502,22 +695,30 @@ const { activeReactions, sendReaction } = useEmojiReactions({ roomCode: code, my
                       {voice.mutedPlayers.has(p.id) ? '🔇' : '🔊'}
                     </button>
                   )}
+
                   {iAmHost && !isMe && !p.is_spectator && (
                     <div className="flex items-center gap-1">
-                      <button onClick={() => handleTransferHost(p.id, p.name)}
+                      <button
+                        onClick={() => handleTransferHost(p.id, p.name)}
                         className="text-amber-300/70 hover:text-amber-300 text-xs px-2 py-1 rounded transition"
-                        title="Make this player the host">
+                        title="Make this player the host"
+                      >
                         👑
                       </button>
-                      <button onClick={() => handleKick(p.id)}
-                        className="text-red-400/70 hover:text-red-400 text-xs px-2 py-1 rounded transition">
+                      <button
+                        onClick={() => handleKick(p.id)}
+                        className="text-red-400/70 hover:text-red-400 text-xs px-2 py-1 rounded transition"
+                      >
                         kick
                       </button>
                     </div>
                   )}
+
                   {iAmHost && !isMe && p.is_spectator && (
-                    <button onClick={() => handleKick(p.id)}
-                      className="text-red-400/70 hover:text-red-400 text-xs px-2 py-1 rounded transition">
+                    <button
+                      onClick={() => handleKick(p.id)}
+                      className="text-red-400/70 hover:text-red-400 text-xs px-2 py-1 rounded transition"
+                    >
                       kick
                     </button>
                   )}
@@ -532,29 +733,31 @@ const { activeReactions, sendReaction } = useEmojiReactions({ roomCode: code, my
             <button
               disabled={playerCount < 2}
               onClick={() => setShowSettings(true)}
-              className="w-full py-4 rounded-xl font-semibold bg-gradient-to-b from-amber-200 to-amber-400 text-[#07100c] disabled:opacity-40 disabled:cursor-not-allowed">
-              {playerCount < 2
-                ? 'Waiting for more players...'
-                : `Start Game (${playerCount} players)`}
+              className="w-full py-4 rounded-xl font-semibold bg-gradient-to-b from-amber-200 to-amber-400 text-[#07100c] disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {playerCount < 2 ? 'Waiting for more players...' : `Start Game (${playerCount} players)`}
             </button>
           )}
 
           {!iAmHost && (
             <div className="text-center text-emerald-200/40 text-sm py-3">
-              Waiting for the host to start the game...
+              {iAmPendingSpectator
+                ? 'Waiting for the host to approve your spectator request...'
+                : 'Waiting for the host to start the game...'}
             </div>
           )}
 
           <InstallAppButton className="w-full justify-center" />
 
-          <button onClick={() => setConfirmLeave(true)}
-            className="w-full py-3 rounded-xl border border-red-900/40 text-red-400/80 hover:bg-red-950/30 transition text-sm">
+          <button
+            onClick={() => setConfirmLeave(true)}
+            className="w-full py-3 rounded-xl border border-red-900/40 text-red-400/80 hover:bg-red-950/30 transition text-sm"
+          >
             Leave Room
           </button>
         </div>
       </div>
 
-     {/* Theme picker modal */}
       {showThemePicker && (
         <ThemePicker
           code={code}
@@ -565,30 +768,37 @@ const { activeReactions, sendReaction } = useEmojiReactions({ roomCode: code, my
         />
       )}
 
-        {/* History modal — visible to all players, hosts can manage rankings */}
       {showHistory && (
         <MatchHistoryModal code={code} onClose={() => setShowHistory(false)} iAmHost={iAmHost} />
       )}
 
-      {/* Leave confirmation */}
       {confirmLeave && (
-        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-5"
-          onClick={() => setConfirmLeave(false)}>
-          <div className="max-w-sm w-full bg-[#0f1d18] border border-emerald-900 rounded-2xl p-5"
-            onClick={(e) => e.stopPropagation()}>
+        <div
+          className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-5"
+          onClick={() => setConfirmLeave(false)}
+        >
+          <div
+            className="max-w-sm w-full bg-[#0f1d18] border border-emerald-900 rounded-2xl p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
             <h3 className="text-lg font-serif italic text-amber-200 mb-2">Leave the room?</h3>
             <p className="text-emerald-200/60 text-sm mb-5">
               {iAmHost
-                ? 'You\'re the host. If you leave, another player will become host automatically.'
+                ? "You're the host. If you leave, another player will become host automatically."
                 : 'You can rejoin later as long as the room is still open.'}
             </p>
+
             <div className="flex gap-2">
-              <button onClick={() => setConfirmLeave(false)}
-                className="flex-1 py-3 rounded-xl border border-emerald-900 text-emerald-200/70 hover:bg-emerald-950/40 transition text-sm">
+              <button
+                onClick={() => setConfirmLeave(false)}
+                className="flex-1 py-3 rounded-xl border border-emerald-900 text-emerald-200/70 hover:bg-emerald-950/40 transition text-sm"
+              >
                 Cancel
               </button>
-              <button onClick={handleLeave}
-                className="flex-1 py-3 rounded-xl bg-red-900/40 border border-red-900 text-red-300 hover:bg-red-900/60 transition text-sm">
+              <button
+                onClick={handleLeave}
+                className="flex-1 py-3 rounded-xl bg-red-900/40 border border-red-900 text-red-300 hover:bg-red-900/60 transition text-sm"
+              >
                 Leave
               </button>
             </div>
@@ -612,7 +822,7 @@ const { activeReactions, sendReaction } = useEmojiReactions({ roomCode: code, my
         messages={chat.messages}
         sendMessage={chat.sendMessage}
         myPlayerId={me?.playerId}
-        roomPlayers={players
+        roomPlayers={visiblePlayers
           .filter((p) => !p.is_spectator)
           .map((p) => ({
             player_id: p.id,
@@ -621,35 +831,47 @@ const { activeReactions, sendReaction } = useEmojiReactions({ roomCode: code, my
           }))}
       />
 
-      {/* Settings Modal */}
       {showSettings && iAmHost && (
-        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-5"
-          onClick={() => !starting && setShowSettings(false)}>
-          <div className="max-w-md w-full bg-[#0f1d18] border border-emerald-900 rounded-2xl p-6 max-h-[90vh] overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}>
+        <div
+          className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-5"
+          onClick={() => !starting && setShowSettings(false)}
+        >
+          <div
+            className="max-w-md w-full bg-[#0f1d18] border border-emerald-900 rounded-2xl p-6 max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
             <h2 className="text-2xl font-serif italic text-amber-200 mb-1">Game Setup</h2>
             <p className="text-emerald-200/50 text-sm mb-6">Configure before dealing cards.</p>
 
             <div className="mb-5">
-              <label className="block text-xs uppercase tracking-widest text-emerald-200/60 mb-2">Mode</label>
+              <label className="block text-xs uppercase tracking-widest text-emerald-200/60 mb-2">
+                Mode
+              </label>
               <div className="flex gap-2">
-                <button onClick={() => setMode('individual')}
+                <button
+                  onClick={() => setMode('individual')}
                   className={`flex-1 py-3 rounded-xl text-sm font-medium border transition ${
                     mode === 'individual'
                       ? 'bg-amber-200/10 border-amber-300 text-amber-200'
                       : 'bg-[#14271f] border-emerald-900 text-emerald-200/70 hover:border-emerald-700'
-                  }`}>
+                  }`}
+                >
                   Individual
                 </button>
-                <button onClick={() => setMode('team')} disabled={!teamAvailable}
+
+                <button
+                  onClick={() => setMode('team')}
+                  disabled={!teamAvailable}
                   className={`flex-1 py-3 rounded-xl text-sm font-medium border transition disabled:opacity-30 disabled:cursor-not-allowed ${
                     mode === 'team'
                       ? 'bg-amber-200/10 border-amber-300 text-amber-200'
                       : 'bg-[#14271f] border-emerald-900 text-emerald-200/70 hover:border-emerald-700'
-                  }`}>
+                  }`}
+                >
                   Teams
                 </button>
               </div>
+
               {!teamAvailable && (
                 <p className="text-xs text-emerald-200/40 mt-2">
                   Team mode needs 4, 6, or 8 players.
@@ -658,19 +880,26 @@ const { activeReactions, sendReaction } = useEmojiReactions({ roomCode: code, my
             </div>
 
             <div className="mb-5">
-              <label className="block text-xs uppercase tracking-widest text-emerald-200/60 mb-2">Decks</label>
+              <label className="block text-xs uppercase tracking-widest text-emerald-200/60 mb-2">
+                Decks
+              </label>
+
               <div className="flex gap-2">
                 {[1, 2].map((n) => (
-                  <button key={n} onClick={() => {
-                    if (!deckOptions.includes(n)) return;
-                    setDeckCount(n);
-                    setMaxRounds(maxRoundsFor(playerCount, n));
-                  }} disabled={!deckOptions.includes(n)}
+                  <button
+                    key={n}
+                    onClick={() => {
+                      if (!deckOptions.includes(n)) return;
+                      setDeckCount(n);
+                      setMaxRounds(maxRoundsFor(playerCount, n));
+                    }}
+                    disabled={!deckOptions.includes(n)}
                     className={`flex-1 py-3 rounded-xl text-sm font-medium border transition disabled:opacity-30 disabled:cursor-not-allowed ${
                       deckCount === n
                         ? 'bg-amber-200/10 border-amber-300 text-amber-200'
                         : 'bg-[#14271f] border-emerald-900 text-emerald-200/70 hover:border-emerald-700'
-                    }`}>
+                    }`}
+                  >
                     {n} {n === 1 ? 'deck' : 'decks'} ({n * 52} cards)
                   </button>
                 ))}
@@ -681,10 +910,17 @@ const { activeReactions, sendReaction } = useEmojiReactions({ roomCode: code, my
               <label className="block text-xs uppercase tracking-widest text-emerald-200/60 mb-2">
                 Max rounds <span className="text-emerald-200/40">(up to {maxRoundsAvailable})</span>
               </label>
+
               <div className="flex items-center gap-3">
-                <input type="range" min={1} max={maxRoundsAvailable}
-                  value={maxRounds} onChange={(e) => setMaxRounds(parseInt(e.target.value))}
-                  className="flex-1 accent-amber-300" />
+                <input
+                  type="range"
+                  min={1}
+                  max={maxRoundsAvailable}
+                  value={maxRounds}
+                  onChange={(e) => setMaxRounds(parseInt(e.target.value))}
+                  className="flex-1 accent-amber-300"
+                />
+
                 <span className="text-2xl font-serif italic text-amber-200 w-12 text-center">
                   {maxRounds}
                 </span>
@@ -692,25 +928,34 @@ const { activeReactions, sendReaction } = useEmojiReactions({ roomCode: code, my
             </div>
 
             <div className="mb-5">
-              <label className="block text-xs uppercase tracking-widest text-emerald-200/60 mb-2">Round Direction</label>
+              <label className="block text-xs uppercase tracking-widest text-emerald-200/60 mb-2">
+                Round Direction
+              </label>
+
               <div className="flex gap-2">
-                <button onClick={() => setDirection('asc')}
+                <button
+                  onClick={() => setDirection('asc')}
                   className={`flex-1 py-3 rounded-xl text-sm font-medium border transition ${
                     direction === 'asc'
                       ? 'bg-amber-200/10 border-amber-300 text-amber-200'
                       : 'bg-[#14271f] border-emerald-900 text-emerald-200/70 hover:border-emerald-700'
-                  }`}>
+                  }`}
+                >
                   🔼 Ascending
                 </button>
-                <button onClick={() => setDirection('desc')}
+
+                <button
+                  onClick={() => setDirection('desc')}
                   className={`flex-1 py-3 rounded-xl text-sm font-medium border transition ${
                     direction === 'desc'
                       ? 'bg-amber-200/10 border-amber-300 text-amber-200'
                       : 'bg-[#14271f] border-emerald-900 text-emerald-200/70 hover:border-emerald-700'
-                  }`}>
+                  }`}
+                >
                   🔽 Descending
                 </button>
               </div>
+
               <p className="text-xs text-emerald-200/40 mt-2">
                 {direction === 'asc'
                   ? `R1 = 1 card · R${maxRounds} = ${maxRounds} cards`
@@ -719,14 +964,19 @@ const { activeReactions, sendReaction } = useEmojiReactions({ roomCode: code, my
             </div>
 
             <div className="mb-6">
-              <label className="block text-xs uppercase tracking-widest text-emerald-200/60 mb-2">Seating Draw</label>
+              <label className="block text-xs uppercase tracking-widest text-emerald-200/60 mb-2">
+                Seating Draw
+              </label>
+
               <div className="space-y-2">
-                <button onClick={() => setDrawMethod('auto')}
+                <button
+                  onClick={() => setDrawMethod('auto')}
                   className={`w-full p-4 rounded-xl text-left border transition ${
                     drawMethod === 'auto'
                       ? 'bg-amber-200/10 border-amber-300'
                       : 'bg-[#14271f] border-emerald-900 hover:border-emerald-700'
-                  }`}>
+                  }`}
+                >
                   <div className={`font-medium ${drawMethod === 'auto' ? 'text-amber-200' : 'text-emerald-100'}`}>
                     Auto-deal
                   </div>
@@ -734,12 +984,15 @@ const { activeReactions, sendReaction } = useEmojiReactions({ roomCode: code, my
                     App reveals everyone's card at once.
                   </div>
                 </button>
-                <button onClick={() => setDrawMethod('pick')}
+
+                <button
+                  onClick={() => setDrawMethod('pick')}
                   className={`w-full p-4 rounded-xl text-left border transition ${
                     drawMethod === 'pick'
                       ? 'bg-amber-200/10 border-amber-300'
                       : 'bg-[#14271f] border-emerald-900 hover:border-emerald-700'
-                  }`}>
+                  }`}
+                >
                   <div className={`font-medium ${drawMethod === 'pick' ? 'text-amber-200' : 'text-emerald-100'}`}>
                     Pick your own
                   </div>
@@ -751,12 +1004,19 @@ const { activeReactions, sendReaction } = useEmojiReactions({ roomCode: code, my
             </div>
 
             <div className="flex gap-2">
-              <button onClick={() => setShowSettings(false)} disabled={starting}
-                className="flex-1 py-3 rounded-xl border border-emerald-900 text-emerald-200/70 hover:bg-emerald-950/40 transition text-sm">
+              <button
+                onClick={() => setShowSettings(false)}
+                disabled={starting}
+                className="flex-1 py-3 rounded-xl border border-emerald-900 text-emerald-200/70 hover:bg-emerald-950/40 transition text-sm"
+              >
                 Cancel
               </button>
-              <button onClick={handleConfirmStart} disabled={starting}
-                className="flex-1 py-3 rounded-xl font-semibold bg-gradient-to-b from-amber-200 to-amber-400 text-[#07100c] disabled:opacity-50">
+
+              <button
+                onClick={handleConfirmStart}
+                disabled={starting}
+                className="flex-1 py-3 rounded-xl font-semibold bg-gradient-to-b from-amber-200 to-amber-400 text-[#07100c] disabled:opacity-50"
+              >
                 {starting ? 'Dealing...' : 'Lock settings & deal'}
               </button>
             </div>
