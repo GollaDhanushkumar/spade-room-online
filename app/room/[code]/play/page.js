@@ -261,14 +261,25 @@ setPlayers(playerRows || []);
           await refreshAllRounds(room.current_game_id);
         })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'hands' },
-        async () => {
-          const { data: room } = await supabase.from('rooms').select('current_game_id').eq('code', code).single();
-          if (!room?.current_game_id) return;
-          const { data: g } = await supabase.from('games').select('current_round').eq('id', room.current_game_id).single();
-          if (!g) return;
-          await refreshHandAndRound(room.current_game_id, g.current_round, me.playerId);
-          await refreshAllHands(room.current_game_id, g.current_round);
-        })
+  async () => {
+    const { data: room } = await supabase
+      .from('rooms')
+      .select('current_game_id')
+      .eq('code', code)
+      .single();
+
+    if (!room?.current_game_id) return;
+
+    const { data: g } = await supabase
+      .from('games')
+      .select('current_round')
+      .eq('id', room.current_game_id)
+      .single();
+
+    if (!g) return;
+
+    await refreshAllHands(room.current_game_id, g.current_round);
+  })
 
         .on('postgres_changes', { event: '*', schema: 'public', table: 'game_seats' },
   async (payload) => {
@@ -287,10 +298,22 @@ setPlayers(playerRows || []);
     await loadEverything();
   }
 )
-.on('postgres_changes', { event: '*', schema: 'public', table: 'players', filter: `room_code=eq.${code}` },
+.on(
+  'postgres_changes',
+  { event: '*', schema: 'public', table: 'players', filter: `room_code=eq.${code}` },
   async () => {
     if (cancelled) return;
-    await loadEverything();
+
+    const { data: playerRows } = await supabase
+      .from('players')
+      .select('id, name, avatar_id, is_host, is_spectator, spectator_status')
+      .eq('room_code', code)
+      .order('joined_at', { ascending: true });
+
+    if (cancelled || !playerRows) return;
+
+    setPlayers(playerRows);
+    setHostId(playerRows.find((p) => p.is_host)?.id ?? null);
   }
 )
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `code=eq.${code}` },
@@ -1148,6 +1171,19 @@ function SpectatorsWatchingBox() {
   );
 }
 
+function SpectatorLeaveButton() {
+  if (!iAmSpectator) return null;
+
+  return (
+    <button
+      onClick={handleLeaveRoom}
+      className="fixed bottom-4 right-4 z-40 px-4 py-2 rounded-full bg-red-900/70 border border-red-500/50 text-red-100 text-xs font-semibold shadow-lg hover:bg-red-900 active:scale-95 transition"
+    >
+      Leave Spectating
+    </button>
+  );
+}
+
   if (loading) {
     return <main className="min-h-screen flex items-center justify-center bg-[#0a1410] text-emerald-200">Loading...</main>;
   }
@@ -1169,7 +1205,8 @@ function SpectatorsWatchingBox() {
       <>
       {showSpectatorWelcome && <SpectatorWelcome onDismiss={dismissSpectatorWelcome} />}
       <SpectatorRequestsBox />
-      <SpectatorsWatchingBox />
+<SpectatorsWatchingBox />
+<SpectatorLeaveButton />
       {iAmSpectator && <SpectatorBadge className="fixed top-3 right-3 z-40" />}
       <GameOverScreen
         code={code}
@@ -1207,8 +1244,9 @@ function SpectatorsWatchingBox() {
       return (
         <>
         {showSpectatorWelcome && <SpectatorWelcome onDismiss={dismissSpectatorWelcome} />}
-        <SpectatorRequestsBox />
-        <SpectatorsWatchingBox />
+       <SpectatorRequestsBox />
+<SpectatorsWatchingBox />
+<SpectatorLeaveButton />
         <main className="min-h-screen text-emerald-50 px-5 py-7"
         style={{ background: `linear-gradient(to bottom, var(--theme-bg-from, #0a1410), var(--theme-bg-to, #0f3d2c))` }}>
          {(round?.trick_history?.length ?? 0) > 0 && (
@@ -1329,8 +1367,9 @@ function SpectatorsWatchingBox() {
     return (
       <>
       {showSpectatorWelcome && <SpectatorWelcome onDismiss={dismissSpectatorWelcome} />}
-      <SpectatorRequestsBox />
-      <SpectatorsWatchingBox />
+<SpectatorRequestsBox />
+<SpectatorsWatchingBox />
+<SpectatorLeaveButton />
       <main className="min-h-screen text-emerald-50 px-5 py-7"
         style={{ background: `linear-gradient(to bottom, var(--theme-bg-from, #0a1410), var(--theme-bg-to, #0f3d2c))` }}>
         {(round?.trick_history?.length ?? 0) > 0 && (
@@ -1603,8 +1642,9 @@ function SpectatorsWatchingBox() {
     return (
       <>
       {showSpectatorWelcome && <SpectatorWelcome onDismiss={dismissSpectatorWelcome} />}
-      <SpectatorRequestsBox />
-      <SpectatorsWatchingBox />
+<SpectatorRequestsBox />
+<SpectatorsWatchingBox />
+<SpectatorLeaveButton />
       <main className="min-h-screen text-emerald-50 px-5 py-7"
         style={{ background: `linear-gradient(to bottom, var(--theme-bg-from, #0a1410), var(--theme-bg-to, #0f3d2c))` }}>
         {(round?.trick_history?.length ?? 0) > 0 && (
@@ -1751,7 +1791,8 @@ function SpectatorsWatchingBox() {
         <>
         {showSpectatorWelcome && <SpectatorWelcome onDismiss={dismissSpectatorWelcome} />}
         <SpectatorRequestsBox />
-        <SpectatorsWatchingBox />
+<SpectatorsWatchingBox />
+<SpectatorLeaveButton />
         <main className="min-h-screen text-emerald-50 px-3 py-5 flex flex-col"
         style={{ background: `linear-gradient(to bottom, var(--theme-bg-from, #0a1410), var(--theme-bg-to, #0f3d2c))` }}>
          {(round?.trick_history?.length ?? 0) > 0 && (
@@ -1852,7 +1893,8 @@ function SpectatorsWatchingBox() {
       <>
       {showSpectatorWelcome && <SpectatorWelcome onDismiss={dismissSpectatorWelcome} />}
       <SpectatorRequestsBox />
-      <SpectatorsWatchingBox />
+<SpectatorsWatchingBox />
+<SpectatorLeaveButton />
       <main className="min-h-screen text-emerald-50 px-3 py-5 flex flex-col"
         style={{ background: `linear-gradient(to bottom, var(--theme-bg-from, #0a1410), var(--theme-bg-to, #0f3d2c))` }}>
        {(round?.trick_history?.length ?? 0) > 0 && (

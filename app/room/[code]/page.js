@@ -740,12 +740,21 @@ export default function RoomPage({ params }) {
           )}
 
           {!iAmHost && (
-            <div className="text-center text-emerald-200/40 text-sm py-3">
-              {iAmPendingSpectator
-                ? 'Waiting for the host to approve your spectator request...'
-                : 'Waiting for the host to start the game...'}
-            </div>
-          )}
+  <div className="text-center text-emerald-200/40 text-sm py-3">
+    {iAmPendingSpectator
+      ? 'Waiting for the host to approve your spectator request...'
+      : 'Waiting for the host to start the game...'}
+  </div>
+)}
+
+{iAmPendingSpectator && (
+  <button
+    onClick={handleLeave}
+    className="w-full py-3 rounded-xl border border-red-900/40 text-red-400/80 hover:bg-red-950/30 transition text-sm"
+  >
+    Leave Spectating
+  </button>
+)}
 
           <InstallAppButton className="w-full justify-center" />
 
