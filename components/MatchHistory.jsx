@@ -231,16 +231,23 @@ function MatchRow({ match, currentRoom, removedSet = new Set(), onClick }) {
     >
       <div className="flex items-center justify-between mb-2">
         <p className="text-xs text-emerald-200/50 uppercase tracking-widest">{dateStr}</p>
-        <div className="flex items-center gap-2">
-          <span className={`text-[10px] uppercase tracking-wider font-mono px-1.5 py-0.5 rounded ${
-            wasInThisRoom ? 'bg-amber-300/15 text-amber-200' : 'bg-emerald-950/40 text-emerald-200/40'
-          }`}>
-            {match.room_code}
-          </span>
-          <p className="text-[10px] text-emerald-200/40 uppercase tracking-wider">
-            {isTeam ? 'Team' : 'Indiv'} · {match.player_count}p · R{match.max_rounds}
-          </p>
-        </div>
+<div className="flex items-center gap-2 flex-wrap justify-end">
+  <span className={`text-[10px] uppercase tracking-wider font-mono px-1.5 py-0.5 rounded ${
+    wasInThisRoom ? 'bg-amber-300/15 text-amber-200' : 'bg-emerald-950/40 text-emerald-200/40'
+  }`}>
+    {match.room_code}
+  </span>
+
+  <p className="text-[10px] text-emerald-200/40 uppercase tracking-wider">
+    {isTeam ? 'Team' : 'Indiv'} · {match.player_count}p · R{match.max_rounds}
+  </p>
+
+  {match.finish_reason === 'declared' && (
+    <span className="px-2 py-0.5 rounded-full bg-red-900/50 border border-red-400/40 text-red-200 text-[9px] uppercase tracking-widest">
+      Declared
+    </span>
+  )}
+</div>
       </div>
 
       <div className="flex items-center gap-2 mb-2">

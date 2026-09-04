@@ -58,6 +58,67 @@ function sortHand(cards) {
   });
 }
 
+function getDeclareWinnerInfo({ isTeamMode, allRounds, seatedPlayers, teamsByTeam }) {
+  const completedRounds = (allRounds || []).filter((r) => r.completed_at);
+
+  if (completedRounds.length === 0) {
+    return null;
+  }
+
+  if (isTeamMode) {
+    const teamTotals = {};
+
+    for (const teamId of Object.keys(teamsByTeam || {})) {
+      teamTotals[teamId] = 0;
+    }
+
+    for (const r of completedRounds) {
+      for (const [teamId, score] of Object.entries(r.team_scores || {})) {
+        teamTotals[teamId] = (teamTotals[teamId] || 0) + score;
+      }
+    }
+
+    const entries = Object.entries(teamTotals).sort((a, b) => b[1] - a[1]);
+    const [leaderId, leaderScore] = entries[0] || [];
+
+    if (!leaderId) return null;
+
+    const leaderSeats = teamsByTeam?.[leaderId] || [];
+    const leaderLabel = leaderSeats.map((s) => s.name).join(' + ') || 'Leading team';
+
+    return {
+      leaderId,
+      leaderLabel,
+      leaderScore,
+    };
+  }
+
+  const playerTotals = {};
+
+  for (const s of seatedPlayers || []) {
+    playerTotals[s.player_id] = 0;
+  }
+
+  for (const r of completedRounds) {
+    for (const [playerId, score] of Object.entries(r.scores || {})) {
+      playerTotals[playerId] = (playerTotals[playerId] || 0) + score;
+    }
+  }
+
+  const entries = Object.entries(playerTotals).sort((a, b) => b[1] - a[1]);
+  const [leaderId, leaderScore] = entries[0] || [];
+
+  if (!leaderId) return null;
+
+  const leaderSeat = seatedPlayers.find((s) => s.player_id === leaderId);
+
+  return {
+    leaderId,
+    leaderLabel: leaderSeat?.name || 'Leading player',
+    leaderScore,
+  };
+}
+
 export default function PlayPage({ params }) {
   const { code } = use(params);
   const router = useRouter();
@@ -453,6 +514,24 @@ function getNextActiveSeatIndex(fromSeatIndex) {
     (round?.scores && Object.keys(round.scores).length > 0);
   const showRecap = game?.status === 'playing' && roundComplete && scoresWritten;
   const isLastRound = game && game.current_round >= game.max_rounds;
+
+  const declareVote = game?.declare_vote || null;
+
+const activeVoteSeats = seatedPlayers.filter(
+  (s) => !stalePlayerIds.has(s.player_id)
+);
+
+const declareInfo = getDeclareWinnerInfo({
+  isTeamMode,
+  allRounds,
+  seatedPlayers,
+  teamsByTeam,
+});
+
+const declareYesVotes = Object.values(declareVote?.votes || {}).filter((v) => v === 'yes').length;
+const declareNoVotes = Object.values(declareVote?.votes || {}).filter((v) => v === 'no').length;
+const declareNeededVotes = Math.floor(activeVoteSeats.length / 2) + 1;
+const myDeclareVote = declareVote?.votes?.[me?.playerId] || null;
 
 async function handleAdjustIndivBid(delta) {
     if (!round || !itsMyBidTurn) return;
@@ -965,6 +1044,7 @@ const round_breakdown = allRounds.map((r) => ({
 
       const matchId = Math.random().toString(36).slice(2, 14);
       const { error: matchErr } = await supabase.from('matches').insert({
+        
         id: matchId,
         room_code: code,
         game_id: game.id,
@@ -974,6 +1054,7 @@ const round_breakdown = allRounds.map((r) => ({
         player_count: seatedPlayers.length,
         started_at: game.created_at ?? new Date().toISOString(),
         completed_at: game.completed_at ?? new Date().toISOString(),
+        finish_reason: game?.declare_vote?.status === 'passed' ? 'declared' : 'normal',
         player_snapshot,
         team_snapshot,
         winner_label: winnerLabel,
@@ -990,6 +1071,135 @@ const round_breakdown = allRounds.map((r) => ({
     saveMatchHistory();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [game?.status, game?.completed_at, iAmHost]);
+
+  function handleSecretChatCommand(command) {
+  const clean = String(command || '').toLowerCase().trim();
+
+  if (clean !== 'declare') return false;
+
+  if (!iAmHost) {
+    alert('Only the host can use this command.');
+    return true;
+  }
+handleStartDeclareVote();
+return true;
+}
+
+async function handleStartDeclareVote() {
+  if (!iAmHost || !game || game.status === 'completed') return;
+
+  if (!declareInfo) {
+    return;
+  }
+
+  if (declareVote?.status === 'active') {
+    return;
+  }
+
+  const vote = {
+    status: 'active',
+    started_by: me.playerId,
+    started_by_name: mySeat?.name || me?.name || 'Host',
+    started_at: new Date().toISOString(),
+    target_type: isTeamMode ? 'team' : 'player',
+    target_id: declareInfo.leaderId,
+    target_label: declareInfo.leaderLabel,
+    target_score: declareInfo.leaderScore,
+    votes: {
+      [me.playerId]: 'yes',
+    },
+  };
+
+  const { error } = await supabase
+    .from('games')
+    .update({ declare_vote: vote })
+    .eq('id', game.id);
+
+  if (error) {
+    console.error('Failed to start declare vote:', error);
+  }
+}
+
+async function handleDeclareVote(choice) {
+  if (!game || !me || iAmSpectator) return;
+
+  const { data: freshGame, error: readErr } = await supabase
+    .from('games')
+    .select('declare_vote')
+    .eq('id', game.id)
+    .single();
+
+  if (readErr) {
+    console.error('Failed to read declare vote:', readErr);
+    return;
+  }
+
+  const currentVote = freshGame?.declare_vote;
+
+  if (!currentVote || currentVote.status !== 'active') return;
+
+  const newVotes = {
+    ...(currentVote.votes || {}),
+    [me.playerId]: choice,
+  };
+
+  const yesCount = Object.values(newVotes).filter((v) => v === 'yes').length;
+const noCount = Object.values(newVotes).filter((v) => v === 'no').length;
+const needed = Math.floor(activeVoteSeats.length / 2) + 1;
+const now = new Date().toISOString();
+
+if (choice === 'no' || noCount > 0) {
+  const rejectedVote = {
+    ...currentVote,
+    votes: newVotes,
+    status: 'rejected',
+    completed_at: now,
+  };
+
+  await supabase
+    .from('games')
+    .update({ declare_vote: rejectedVote })
+    .eq('id', game.id);
+
+  return;
+}
+
+if (yesCount >= needed) {
+    const passedVote = {
+      ...currentVote,
+      votes: newVotes,
+      status: 'passed',
+      completed_at: now,
+    };
+
+    const { error } = await supabase
+      .from('games')
+      .update({
+        status: 'completed',
+        completed_at: now,
+        declare_vote: passedVote,
+      })
+      .eq('id', game.id);
+
+    if (error) {
+      console.error('Failed to complete game by declare vote:', error);
+      alert('Could not declare winner.');
+    }
+
+    return;
+  }
+
+
+  await supabase
+    .from('games')
+    .update({
+      declare_vote: {
+        ...currentVote,
+        votes: newVotes,
+      },
+    })
+    .eq('id', game.id);
+}
 
   async function handleNextRound() {
     if (!iAmHost || !game || advancing) return;
@@ -1054,6 +1264,84 @@ async function handleDenySpectator(playerId) {
     .from('players')
     .delete()
     .eq('id', playerId);
+}
+
+function DeclareWinnerVoteBox() {
+  if (!game || game.status === 'completed' || iAmSpectator) return null;
+
+  const voteActive = declareVote?.status === 'active';
+
+  if (!voteActive) return null;
+
+  return (
+    <div className="fixed inset-0 z-[90] bg-black/55 backdrop-blur-sm flex items-center justify-center px-4">
+      <div className="w-full max-w-sm rounded-3xl bg-[#0f1d18] border border-amber-300/50 shadow-2xl overflow-hidden">
+        <div className="px-5 py-4 border-b border-emerald-900/50 text-center">
+          <p className="text-[10px] uppercase tracking-[0.25em] text-amber-200/60 mb-1">
+            Secret Vote
+          </p>
+          <h2 className="text-xl font-serif italic text-amber-200">
+            Declare Winner?
+          </h2>
+        </div>
+
+        <div className="px-5 py-5 text-center">
+          <p className="text-sm text-emerald-100 leading-relaxed mb-3">
+            <span className="font-semibold text-amber-200">
+              {declareVote.started_by_name || 'Host'}
+            </span>{' '}
+            wants to declare{' '}
+            <span className="font-bold text-amber-200">
+              {declareVote.target_label}
+            </span>{' '}
+            as the winner.
+          </p>
+
+          <div className="rounded-2xl bg-[#14271f] border border-emerald-900/50 px-4 py-3 mb-4">
+            <p className="text-[10px] uppercase tracking-widest text-emerald-200/45 mb-1">
+              Current score
+            </p>
+            <p className="text-3xl font-serif italic text-amber-200">
+              {declareVote.target_score}
+            </p>
+          </div>
+
+          <p className="text-xs text-emerald-200/55 mb-4">
+            Yes {declareYesVotes}/{declareNeededVotes}
+          </p>
+
+          {myDeclareVote ? (
+            <p className="text-sm text-emerald-200/75">
+              You voted{' '}
+              <span className="font-bold text-amber-200">
+                {myDeclareVote.toUpperCase()}
+              </span>
+            </p>
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => handleDeclareVote('yes')}
+                className="py-3 rounded-2xl bg-emerald-700/90 border border-emerald-300/40 text-emerald-50 text-sm font-bold active:scale-95 transition"
+              >
+                Yes
+              </button>
+
+              <button
+                onClick={() => handleDeclareVote('no')}
+                className="py-3 rounded-2xl bg-red-900/90 border border-red-300/40 text-red-100 text-sm font-bold active:scale-95 transition"
+              >
+                No
+              </button>
+            </div>
+          )}
+
+          <p className="text-[10px] text-emerald-200/35 mt-4">
+            One No vote cancels this request.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function SpectatorRequestsBox() {
@@ -1207,6 +1495,7 @@ function SpectatorLeaveButton() {
       <SpectatorRequestsBox />
 <SpectatorsWatchingBox />
 <SpectatorLeaveButton />
+<DeclareWinnerVoteBox />
       {iAmSpectator && <SpectatorBadge className="fixed top-3 right-3 z-40" />}
       <GameOverScreen
         code={code}
@@ -1247,6 +1536,8 @@ function SpectatorLeaveButton() {
        <SpectatorRequestsBox />
 <SpectatorsWatchingBox />
 <SpectatorLeaveButton />
+<DeclareWinnerVoteBox />
+
         <main className="min-h-screen text-emerald-50 px-5 py-7"
         style={{ background: `linear-gradient(to bottom, var(--theme-bg-from, #0a1410), var(--theme-bg-to, #0f3d2c))` }}>
          {(round?.trick_history?.length ?? 0) > 0 && (
@@ -1370,6 +1661,7 @@ function SpectatorLeaveButton() {
 <SpectatorRequestsBox />
 <SpectatorsWatchingBox />
 <SpectatorLeaveButton />
+<DeclareWinnerVoteBox />
       <main className="min-h-screen text-emerald-50 px-5 py-7"
         style={{ background: `linear-gradient(to bottom, var(--theme-bg-from, #0a1410), var(--theme-bg-to, #0f3d2c))` }}>
         {(round?.trick_history?.length ?? 0) > 0 && (
@@ -1633,6 +1925,7 @@ function SpectatorLeaveButton() {
           name: s.name,
           avatar_id: s.avatar_id,
         }))}
+        onSecretCommand={handleSecretChatCommand}
       />
       </>
     );
@@ -1645,6 +1938,7 @@ function SpectatorLeaveButton() {
 <SpectatorRequestsBox />
 <SpectatorsWatchingBox />
 <SpectatorLeaveButton />
+<DeclareWinnerVoteBox />
       <main className="min-h-screen text-emerald-50 px-5 py-7"
         style={{ background: `linear-gradient(to bottom, var(--theme-bg-from, #0a1410), var(--theme-bg-to, #0f3d2c))` }}>
         {(round?.trick_history?.length ?? 0) > 0 && (
@@ -1772,6 +2066,7 @@ function SpectatorLeaveButton() {
           name: s.name,
           avatar_id: s.avatar_id,
         }))}
+        onSecretCommand={handleSecretChatCommand}
       />
       </>
     );
@@ -1793,6 +2088,7 @@ function SpectatorLeaveButton() {
         <SpectatorRequestsBox />
 <SpectatorsWatchingBox />
 <SpectatorLeaveButton />
+<DeclareWinnerVoteBox />
         <main className="min-h-screen text-emerald-50 px-3 py-5 flex flex-col"
         style={{ background: `linear-gradient(to bottom, var(--theme-bg-from, #0a1410), var(--theme-bg-to, #0f3d2c))` }}>
          {(round?.trick_history?.length ?? 0) > 0 && (
@@ -1895,6 +2191,7 @@ function SpectatorLeaveButton() {
       <SpectatorRequestsBox />
 <SpectatorsWatchingBox />
 <SpectatorLeaveButton />
+<DeclareWinnerVoteBox />
       <main className="min-h-screen text-emerald-50 px-3 py-5 flex flex-col"
         style={{ background: `linear-gradient(to bottom, var(--theme-bg-from, #0a1410), var(--theme-bg-to, #0f3d2c))` }}>
        {(round?.trick_history?.length ?? 0) > 0 && (
@@ -2064,6 +2361,7 @@ function SpectatorLeaveButton() {
           name: s.name,
           avatar_id: s.avatar_id,
         }))}
+        onSecretCommand={handleSecretChatCommand}
       />
       </>
     );

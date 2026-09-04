@@ -122,6 +122,7 @@ export function ChatPanel({
   sendMessage,
   myPlayerId,
   roomPlayers,
+  onSecretCommand,
 }) {
   const [text, setText] = useState('');
   const [replyTo, setReplyTo] = useState(null);
@@ -241,6 +242,18 @@ export function ChatPanel({
 
   function handleSend() {
     if (!text.trim()) return;
+    const cleanText = text.trim();
+
+if (cleanText.toLowerCase() === 'declare') {
+  const handled = onSecretCommand?.(cleanText);
+
+  if (handled) {
+    setText('');
+    setReplyTo(null);
+    setShowMentions(false);
+    return;
+  }
+}
 
     const mentioned = getMentionedPlayerIds(text);
 
