@@ -190,10 +190,10 @@ export function ChatPanel({
 
     try {
       const res = await fetch(
-        `https://api.giphy.com/v1/gifs/search?api_key=${GIPHY_API_KEY}&q=${encodeURIComponent(
-          cleanQuery
-        )}&limit=12&rating=pg-13`
-      );
+  `https://api.giphy.com/v1/gifs/search?api_key=${GIPHY_API_KEY}&q=${encodeURIComponent(
+    cleanQuery
+  )}&limit=30&rating=r`
+);
 
       const json = await res.json();
 
