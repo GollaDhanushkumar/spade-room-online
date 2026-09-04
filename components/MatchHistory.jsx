@@ -14,6 +14,7 @@ export default function MatchHistoryModal({ code, onClose, iAmHost }) {
   const [loading, setLoading] = useState(true);
   const [selectedMatch, setSelectedMatch] = useState(null);
   const [activeTab, setActiveTab] = useState('matches');
+const [playerFilter, setPlayerFilter] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -58,6 +59,11 @@ export default function MatchHistoryModal({ code, onClose, iAmHost }) {
     .filter((h) => h.status === 'removed')
     .map((h) => h.identifier)
 );
+const filteredMatches = playerFilter
+  ? matches.filter((m) => matchHasPlayer(m, playerFilter.identifier, removedSet))
+  : matches;
+
+const filterPlayers = getVisibleIndividualRankingPlayers(matches, hiddenRows);
 
 if (selectedMatch) {
   return (
@@ -85,8 +91,10 @@ if (selectedMatch) {
               {activeTab === 'matches' ? 'Match History' : 'Rankings'}
             </h2>
             <p className="text-[10px] text-emerald-200/40 uppercase tracking-wider mt-0.5">
-              All-time · {matches.length} matches
-            </p>
+  {playerFilter
+    ? `${playerFilter.displayName} · ${filteredMatches.length} matches`
+    : `All-time · ${matches.length} matches`}
+</p>
           </div>
           <button
             onClick={onClose}
@@ -131,18 +139,74 @@ if (selectedMatch) {
             </div>
           ) : activeTab === 'matches' ? (
             <div className="space-y-2">
-              {matches.map((m) => (
-                <MatchRow
-  key={m.id}
-  match={m}
-  currentRoom={code}
-  removedSet={removedSet}
-  onClick={() => setSelectedMatch(m)}
-/>
-              ))}
+              <div className="mb-3 flex items-center gap-2">
+  <p className="text-[10px] uppercase tracking-widest text-emerald-200/40 flex-shrink-0">
+    Filter by player
+  </p>
+<select
+  value={playerFilter?.identifier ?? ''}
+  onChange={(e) => {
+    const selected = filterPlayers.find(
+      (p) => p.identifier === e.target.value
+    );
+
+    setPlayerFilter(selected || null);
+  }}
+  className="flex-1 px-3 py-2 rounded-xl bg-[#14271f] border border-emerald-900/60 text-emerald-200 text-xs focus:border-amber-300/60 outline-none cursor-pointer"
+>
+  <option value="">All players</option>
+
+  {filterPlayers.map((p) => (
+    <option key={p.identifier} value={p.identifier}>
+      {p.displayName} ({p.matchCount} matches)
+    </option>
+  ))}
+</select>
+</div>
+              {playerFilter && (
+  <div className="mb-3 px-3 py-2 rounded-xl bg-amber-200/8 border border-amber-300/25 flex items-center justify-between gap-3">
+    <div className="min-w-0">
+      <p className="text-[10px] uppercase tracking-widest text-amber-200/60">
+        Filter active
+      </p>
+      <p className="text-sm text-amber-100 truncate">
+        Showing {playerFilter.displayName}'s matches
+      </p>
+    </div>
+
+    <button
+      onClick={() => setPlayerFilter(null)}
+      className="px-3 py-1.5 rounded-lg bg-amber-300 text-[#07100c] text-xs font-bold flex-shrink-0"
+    >
+      Clear ×
+    </button>
+  </div>
+)}
+
+{filteredMatches.length === 0 ? (
+  <div className="text-center py-12">
+    <p className="text-4xl mb-3">🔎</p>
+    <p className="text-emerald-200/60 text-sm">No matches for this player</p>
+    <p className="text-emerald-200/40 text-xs mt-2">Clear the filter to see all matches.</p>
+  </div>
+) : (
+  filteredMatches.map((m) => (
+    <MatchRow
+      key={m.id}
+      match={m}
+      currentRoom={code}
+      removedSet={removedSet}
+      onClick={() => setSelectedMatch(m)}
+    />
+  ))
+)}
             </div>
           ) : (
-            <RankingsView matches={matches} hiddenRows={hiddenRows} iAmHost={iAmHost} />
+<RankingsView
+  matches={matches}
+  hiddenRows={hiddenRows}
+  iAmHost={iAmHost}
+/>
           )}
         </div>
       </div>
@@ -473,7 +537,7 @@ function IndividualRankings({ matches, hiddenSet, iAmHost, editMode, setEditMode
         </div>
       ) : (
         ranked.map((p, idx) => (
-          <PlayerRankingRow
+         <PlayerRankingRow
   key={p.identifier}
   player={p}
   rank={idx + 1}
@@ -490,7 +554,6 @@ function IndividualRankings({ matches, hiddenSet, iAmHost, editMode, setEditMode
     </>
   );
 }
-
 function PlayerRankingRow({ player, rank, sortBy, editMode, onHideClick }) {
   const [expanded, setExpanded] = useState(false);
   const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : `#${rank}`;
@@ -499,19 +562,20 @@ function PlayerRankingRow({ player, rank, sortBy, editMode, onHideClick }) {
   const bidAccuracyPct = player.totalBids > 0 ? Math.round((player.correctBids / player.totalBids) * 100) : 0;
 
   const displayMetric =
-  sortBy === 'totalPoints'
-    ? { value: `${player.totalPoints > 0 ? '+' : ''}${player.totalPoints}`, label: 'total points' }
-    : sortBy === 'bidAccuracy'
-      ? { value: `${bidAccuracyPct}%`, label: 'bid accuracy' }
-      : sortBy === 'matches'
-        ? { value: player.matchesPlayed, label: 'matches' }
-        : { value: `${winRatePct}%`, label: 'win rate' };
+    sortBy === 'totalPoints'
+      ? { value: `${player.totalPoints > 0 ? '+' : ''}${player.totalPoints}`, label: 'total points' }
+      : sortBy === 'bidAccuracy'
+        ? { value: `${bidAccuracyPct}%`, label: 'bid accuracy' }
+        : sortBy === 'matches'
+          ? { value: player.matchesPlayed, label: 'matches' }
+          : { value: `${winRatePct}%`, label: 'win rate' };
 
   const streakLabel = player.currentStreak === 0
     ? 'No streak'
     : player.streakType === 'win'
       ? `🔥 ${player.currentStreak}W streak`
       : `❄️ ${player.currentStreak}L streak`;
+
   const streakColor = player.currentStreak === 0
     ? '#86a294'
     : player.streakType === 'win'
@@ -521,8 +585,12 @@ function PlayerRankingRow({ player, rank, sortBy, editMode, onHideClick }) {
   return (
     <div className="bg-[#14271f] border border-emerald-900/50 rounded-xl p-3 transition mb-2">
       <div className="flex items-center gap-3">
-        <span className="text-lg font-serif italic text-amber-200 w-10 text-center flex-shrink-0">{medal}</span>
+        <span className="text-lg font-serif italic text-amber-200 w-10 text-center flex-shrink-0">
+          {medal}
+        </span>
+
         <Avatar avatarId={player.avatarId} playerName={player.displayName} size="sm" />
+
         <button
           onClick={() => setExpanded((v) => !v)}
           className="flex-1 min-w-0 text-left"
@@ -532,10 +600,16 @@ function PlayerRankingRow({ player, rank, sortBy, editMode, onHideClick }) {
             {player.wins}W · {player.losses}L · {player.matchesPlayed} matches
           </p>
         </button>
-       <div className="text-right flex-shrink-0">
-  <p className="text-lg font-serif italic font-bold text-amber-200">{displayMetric.value}</p>
-  <p className="text-[9px] text-emerald-200/40 uppercase tracking-wider">{displayMetric.label}</p>
-</div>
+
+        <div className="text-right flex-shrink-0">
+          <p className="text-lg font-serif italic font-bold text-amber-200">
+            {displayMetric.value}
+          </p>
+          <p className="text-[9px] text-emerald-200/40 uppercase tracking-wider">
+            {displayMetric.label}
+          </p>
+        </div>
+
         {editMode && (
           <button
             onClick={onHideClick}
@@ -556,6 +630,7 @@ function PlayerRankingRow({ player, rank, sortBy, editMode, onHideClick }) {
             <PlacementBadge emoji="🥉" count={player.thirdCount} />
             <PlacementBadge emoji="🪦" label="Last" count={player.lastCount} />
           </div>
+
           <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
             <StatLine label="Total points" value={`${player.totalPoints > 0 ? '+' : ''}${player.totalPoints}`} color={player.totalPoints > 0 ? '#86efac' : '#fca5a5'} />
             <StatLine label="Avg / match" value={`${avgScore > 0 ? '+' : ''}${avgScore}`} color={avgScore > 0 ? '#86efac' : '#fca5a5'} />
@@ -569,7 +644,6 @@ function PlayerRankingRow({ player, rank, sortBy, editMode, onHideClick }) {
     </div>
   );
 }
-
 // ──────────────────────────────────────────────────────────
 // Team rankings wrapper — Pair Rankings / Player Stats inside Team
 // ──────────────────────────────────────────────────────────
@@ -978,7 +1052,42 @@ function simpleIdentifier(name) {
   return (name || 'unknown').toLowerCase().trim();
 }
 
+function matchHasPlayer(match, identifier, removedSet = new Set()) {
+  if (!identifier) return false;
+
+  const playerSnap = match.player_snapshot || [];
+  const wanted = String(identifier).toLowerCase().trim();
+
+  return playerSnap.some((p) => {
+    const playerIdentifier = simpleIdentifier(p.name);
+    return playerIdentifier === wanted && !removedSet.has(playerIdentifier);
+  });
+}
+
+function getVisibleIndividualRankingPlayers(matches, hiddenRows = []) {
+  const individualMatches = matches.filter((m) => m.mode === 'individual');
+
+  const hiddenSet = new Set(
+    hiddenRows
+      .filter((h) => (h.status || 'hidden') === 'hidden' || h.status === 'removed')
+      .map((h) => h.identifier)
+  );
+
+  const stats = computePlayerStats(individualMatches);
+
+  return Object.values(stats)
+    .filter((p) => !hiddenSet.has(p.identifier))
+    .sort((a, b) => a.displayName.localeCompare(b.displayName))
+    .map((p) => ({
+      identifier: p.identifier,
+      displayName: p.displayName,
+      avatarId: p.avatarId,
+      matchCount: p.matchesPlayed,
+    }));
+}
+
 function getVisibleWinnerInfo(match, removedSet = new Set()) {
+
   const ranked = buildRanking(match, removedSet);
   const top = ranked[0];
 
