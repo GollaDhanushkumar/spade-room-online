@@ -6,6 +6,7 @@ import Avatar from './Avatar';
 import { notifyDhanushMention } from '@/lib/notify';
 
 const MESSAGE_LIMIT = 50;
+const GIPHY_API_KEY = process.env.NEXT_PUBLIC_GIPHY_API_KEY;
 
 // Hook: subscribes to chat for a room
 export function useChat({ roomCode, myPlayerId, myName, myAvatarId }) {
@@ -14,6 +15,7 @@ export function useChat({ roomCode, myPlayerId, myName, myAvatarId }) {
   const [isOpen, setIsOpenState] = useState(false);
 
   const isOpenRef = useRef(false);
+
   const setIsOpen = useCallback((v) => {
     isOpenRef.current = v;
     setIsOpenState(v);
@@ -22,6 +24,7 @@ export function useChat({ roomCode, myPlayerId, myName, myAvatarId }) {
 
   useEffect(() => {
     if (!roomCode) return;
+
     let cancelled = false;
 
     async function loadMessages() {
@@ -31,36 +34,47 @@ export function useChat({ roomCode, myPlayerId, myName, myAvatarId }) {
         .eq('room_code', roomCode)
         .order('created_at', { ascending: false })
         .limit(MESSAGE_LIMIT);
+
       if (!cancelled && data) {
         setMessages(data.reverse());
       }
     }
+
     loadMessages();
 
-const channel = supabase
+    const channel = supabase
       .channel(`chat-${roomCode}`)
-      .on('postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `room_code=eq.${roomCode}` },
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'chat_messages',
+          filter: `room_code=eq.${roomCode}`,
+        },
         (payload) => {
           if (cancelled) return;
+
           const m = payload.new;
+
           setMessages((prev) => {
             if (prev.some((x) => x.id === m.id)) return prev;
-            const next = [...prev, m].slice(-MESSAGE_LIMIT);
-            return next;
+            return [...prev, m].slice(-MESSAGE_LIMIT);
           });
+
           if (!isOpenRef.current && m.player_id !== myPlayerId) {
             setUnreadCount((n) => n + 1);
           }
-          // 🔔 ntfy ping if Dhanush was mentioned (only Dhanush will have the env var set)
+
           const lowerName = (myName || '').toLowerCase().trim();
           const iAmDhanush = lowerName === 'dhanush';
+
           if (iAmDhanush && (m.mentioned_player_ids || []).includes(myPlayerId)) {
             notifyDhanushMention({
               fromName: m.player_name,
               message: m.message,
               roomCode,
-              iAmDhanush: false, // sender is someone else, we already checked
+              iAmDhanush: false,
             });
           }
         }
@@ -71,54 +85,80 @@ const channel = supabase
       cancelled = true;
       supabase.removeChannel(channel);
     };
-  }, [roomCode, myPlayerId]);
+  }, [roomCode, myPlayerId, myName]);
 
-  const sendMessage = useCallback(async ({ text, replyTo, mentionedIds }) => {
-    if (!text.trim() || !roomCode || !myPlayerId) return;
-    const payload = {
-      room_code: roomCode,
-      player_id: myPlayerId,
-      player_name: myName || 'Unknown',
-      player_avatar_id: myAvatarId || null,
-      message: text.trim().slice(0, 500),
-      reply_to_id: replyTo?.id ?? null,
-      reply_to_name: replyTo?.player_name ?? null,
-      reply_to_message: replyTo?.message ? replyTo.message.slice(0, 100) : null,
-      mentioned_player_ids: mentionedIds || [],
-    };
-    const { error } = await supabase.from('chat_messages').insert(payload);
-    if (error) {
-      console.error('Failed to send chat message:', error);
-    }
-  }, [roomCode, myPlayerId, myName, myAvatarId]);
+  const sendMessage = useCallback(
+    async ({ text, replyTo, mentionedIds }) => {
+      if (!text.trim() || !roomCode || !myPlayerId) return;
+
+      const payload = {
+        room_code: roomCode,
+        player_id: myPlayerId,
+        player_name: myName || 'Unknown',
+        player_avatar_id: myAvatarId || null,
+        message: text.trim().slice(0, 500),
+        reply_to_id: replyTo?.id ?? null,
+        reply_to_name: replyTo?.player_name ?? null,
+        reply_to_message: replyTo?.message ? replyTo.message.slice(0, 100) : null,
+        mentioned_player_ids: mentionedIds || [],
+      };
+
+      const { error } = await supabase.from('chat_messages').insert(payload);
+
+      if (error) {
+        console.error('Failed to send chat message:', error);
+      }
+    },
+    [roomCode, myPlayerId, myName, myAvatarId]
+  );
 
   return { messages, sendMessage, unreadCount, isOpen, setIsOpen };
 }
 
 export function ChatPanel({
-  isOpen, onClose, messages, sendMessage,
-  myPlayerId, roomPlayers,
+  isOpen,
+  onClose,
+  messages,
+  sendMessage,
+  myPlayerId,
+  roomPlayers,
 }) {
   const [text, setText] = useState('');
   const [replyTo, setReplyTo] = useState(null);
   const [showMentions, setShowMentions] = useState(false);
   const [mentionFilter, setMentionFilter] = useState('');
+
+  const [showGifPicker, setShowGifPicker] = useState(false);
+  const [gifSearch, setGifSearch] = useState('laugh');
+  const [gifResults, setGifResults] = useState([]);
+  const [gifLoading, setGifLoading] = useState(false);
+
   const inputRef = useRef(null);
   const scrollRef = useRef(null);
 
   useEffect(() => {
     if (!isOpen) return;
+
     const el = scrollRef.current;
+
     if (el) {
-      setTimeout(() => { el.scrollTop = el.scrollHeight; }, 50);
+      setTimeout(() => {
+        el.scrollTop = el.scrollHeight;
+      }, 50);
     }
   }, [isOpen, messages.length]);
 
   useEffect(() => {
     const lastAt = text.lastIndexOf('@');
-    if (lastAt === -1) { setShowMentions(false); return; }
+
+    if (lastAt === -1) {
+      setShowMentions(false);
+      return;
+    }
+
     const after = text.slice(lastAt + 1);
     const charBefore = lastAt === 0 ? ' ' : text[lastAt - 1];
+
     if ((charBefore === ' ' || charBefore === '') && !after.includes(' ')) {
       setShowMentions(true);
       setMentionFilter(after.toLowerCase());
@@ -127,27 +167,102 @@ export function ChatPanel({
     }
   }, [text]);
 
+  useEffect(() => {
+    if (!showGifPicker) return;
+
+    const timeout = setTimeout(() => {
+      searchGifs(gifSearch);
+    }, 350);
+
+    return () => clearTimeout(timeout);
+  }, [showGifPicker, gifSearch]);
+
+  async function searchGifs(query) {
+    if (!GIPHY_API_KEY) {
+      console.error('Missing NEXT_PUBLIC_GIPHY_API_KEY');
+      return;
+    }
+
+    const cleanQuery = query.trim() || 'funny';
+
+    setGifLoading(true);
+
+    try {
+      const res = await fetch(
+        `https://api.giphy.com/v1/gifs/search?api_key=${GIPHY_API_KEY}&q=${encodeURIComponent(
+          cleanQuery
+        )}&limit=12&rating=pg-13`
+      );
+
+      const json = await res.json();
+
+      const gifs = (json.data || [])
+        .map((g) => ({
+          id: g.id,
+          title: g.title,
+          url:
+            g.images?.fixed_height_small?.url ||
+            g.images?.preview_gif?.url ||
+            g.images?.original?.url,
+        }))
+        .filter((g) => Boolean(g.url));
+
+      setGifResults(gifs);
+    } catch (err) {
+      console.error('Failed to search GIFs:', err);
+    } finally {
+      setGifLoading(false);
+    }
+  }
+
   function pickMention(player) {
     const lastAt = text.lastIndexOf('@');
     if (lastAt === -1) return;
+
     const newText = text.slice(0, lastAt) + '@' + player.name + ' ';
     setText(newText);
     setShowMentions(false);
     inputRef.current?.focus();
   }
 
-  function handleSend() {
-    if (!text.trim()) return;
+  function getMentionedPlayerIds(messageText) {
     const mentioned = [];
+
     for (const p of roomPlayers) {
-      const pattern = new RegExp(`@${p.name}\\b`, 'i');
-      if (pattern.test(text) && !mentioned.includes(p.player_id)) {
+      const pattern = new RegExp(`@${escapeRegExp(p.name)}\\b`, 'i');
+
+      if (pattern.test(messageText) && !mentioned.includes(p.player_id)) {
         mentioned.push(p.player_id);
       }
     }
-    sendMessage({ text, replyTo, mentionedIds: mentioned });
+
+    return mentioned;
+  }
+
+  function handleSend() {
+    if (!text.trim()) return;
+
+    const mentioned = getMentionedPlayerIds(text);
+
+    sendMessage({
+      text,
+      replyTo,
+      mentionedIds: mentioned,
+    });
+
     setText('');
     setReplyTo(null);
+  }
+
+  function handleSendGif(gifUrl) {
+    sendMessage({
+      text: `GIF::${gifUrl}`,
+      replyTo,
+      mentionedIds: [],
+    });
+
+    setReplyTo(null);
+    setShowGifPicker(false);
   }
 
   function handleKeyDown(e) {
@@ -176,6 +291,7 @@ export function ChatPanel({
       >
         <div className="flex items-center justify-between px-4 py-3 border-b border-emerald-900/50">
           <h2 className="text-lg font-serif italic text-amber-200">💬 Chat</h2>
+
           <button
             onClick={onClose}
             className="text-emerald-200/60 hover:text-emerald-100 transition text-2xl leading-none w-8 h-8 rounded-full flex items-center justify-center hover:bg-emerald-950/40"
@@ -206,9 +322,14 @@ export function ChatPanel({
         {replyTo && (
           <div className="mx-3 mb-2 px-3 py-2 rounded-lg bg-emerald-950/40 border-l-2 border-amber-300/60 flex items-center gap-2">
             <div className="flex-1 min-w-0">
-              <p className="text-[10px] uppercase tracking-wider text-amber-200/60">Replying to {replyTo.player_name}</p>
-              <p className="text-xs text-emerald-200/70 truncate">{replyTo.message}</p>
+              <p className="text-[10px] uppercase tracking-wider text-amber-200/60">
+                Replying to {replyTo.player_name}
+              </p>
+              <p className="text-xs text-emerald-200/70 truncate">
+                {getDisplayMessage(replyTo.message)}
+              </p>
             </div>
+
             <button
               onClick={() => setReplyTo(null)}
               className="text-emerald-200/60 hover:text-emerald-100 text-xl leading-none w-6 h-6 rounded flex items-center justify-center"
@@ -234,7 +355,71 @@ export function ChatPanel({
           </div>
         )}
 
+        {showGifPicker && (
+          <div className="mx-3 mb-2 p-3 rounded-xl bg-[#14271f] border border-amber-300/30">
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <p className="text-[10px] uppercase tracking-widest text-amber-200/60">
+                Search GIFs
+              </p>
+
+              <button
+                onClick={() => setShowGifPicker(false)}
+                className="text-emerald-200/60 hover:text-emerald-100 text-lg leading-none"
+              >
+                ×
+              </button>
+            </div>
+
+            <input
+              value={gifSearch}
+              onChange={(e) => setGifSearch(e.target.value.slice(0, 50))}
+              placeholder="Search GIFs..."
+              className="w-full px-3 py-2 mb-3 rounded-lg bg-[#0f1d18] border border-emerald-900 text-emerald-100 placeholder-emerald-200/30 text-xs focus:border-amber-300 outline-none"
+            />
+
+            {gifLoading ? (
+              <p className="text-center text-emerald-200/50 text-xs py-4">
+                Loading GIFs...
+              </p>
+            ) : gifResults.length === 0 ? (
+              <p className="text-center text-emerald-200/40 text-xs py-4">
+                No GIFs found
+              </p>
+            ) : (
+              <div className="grid grid-cols-3 gap-2 max-h-52 overflow-y-auto">
+                {gifResults.map((gif) => (
+                  <button
+                    key={gif.id}
+                    onClick={() => handleSendGif(gif.url)}
+                    className="aspect-square rounded-xl overflow-hidden border border-emerald-900/50 hover:border-amber-300/70 active:scale-95 transition bg-[#0f1d18]"
+                    title={gif.title}
+                  >
+                    <img
+                      src={gif.url}
+                      alt={gif.title || 'GIF'}
+                      className="w-full h-full object-cover"
+                      loading="lazy"
+                    />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="border-t border-emerald-900/50 p-3 flex gap-2 items-end">
+          <button
+            onClick={() => setShowGifPicker((v) => !v)}
+            className={`px-3 py-2 rounded-xl font-semibold text-sm whitespace-nowrap border transition ${
+              showGifPicker
+                ? 'bg-amber-300 text-[#07100c] border-amber-300'
+                : 'bg-[#14271f] text-amber-200 border-amber-300/30 hover:bg-emerald-950/40'
+            }`}
+            title="Search GIFs"
+          >
+            GIF
+          </button>
+
           <textarea
             ref={inputRef}
             value={text}
@@ -245,6 +430,7 @@ export function ChatPanel({
             className="flex-1 px-3 py-2 rounded-xl bg-[#14271f] border border-emerald-900 text-emerald-100 placeholder-emerald-200/30 text-sm focus:border-amber-300 outline-none resize-none"
             style={{ maxHeight: 100 }}
           />
+
           <button
             onClick={handleSend}
             disabled={!text.trim()}
@@ -257,10 +443,18 @@ export function ChatPanel({
     </div>
   );
 }
-
 function MessageRow({ message, isMe, myPlayerId, onReply }) {
   const [showActions, setShowActions] = useState(false);
   const isMentioned = (message.mentioned_player_ids || []).includes(myPlayerId);
+  const gifUrl = getGifUrl(message.message);
+
+  const bubbleClass = gifUrl
+    ? 'bg-[#14271f] text-emerald-50 border border-emerald-900/50'
+    : isMe
+      ? 'bg-amber-300 text-[#07100c] rounded-tr-sm'
+      : isMentioned
+        ? 'bg-amber-300/20 border border-amber-300/50 text-emerald-50 rounded-tl-sm'
+        : 'bg-[#14271f] text-emerald-50 rounded-tl-sm';
 
   return (
     <div
@@ -272,30 +466,58 @@ function MessageRow({ message, isMe, myPlayerId, onReply }) {
           <Avatar avatarId={message.player_avatar_id} playerName={message.player_name} size="xs" />
         </div>
       )}
+
       <div className={`flex-1 min-w-0 ${isMe ? 'text-right' : ''}`}>
         {!isMe && (
-          <p className="text-[10px] text-emerald-200/50 mb-0.5">{message.player_name}</p>
+          <p className="text-[10px] text-emerald-200/50 mb-0.5">
+            {message.player_name}
+          </p>
         )}
+
         <div
-          className={`inline-block max-w-[85%] px-3 py-2 rounded-2xl text-sm cursor-pointer ${
-            isMe
-              ? 'bg-amber-300 text-[#07100c] rounded-tr-sm'
-              : isMentioned
-                ? 'bg-amber-300/20 border border-amber-300/50 text-emerald-50 rounded-tl-sm'
-                : 'bg-[#14271f] text-emerald-50 rounded-tl-sm'
+          className={`inline-block max-w-[85%] rounded-2xl text-sm cursor-pointer ${bubbleClass} ${
+            gifUrl ? 'p-1' : 'px-3 py-2'
           }`}
         >
           {message.reply_to_id && message.reply_to_name && (
-            <div className={`mb-1 pb-1 border-b ${isMe ? 'border-[#07100c]/20' : 'border-emerald-900/40'} text-[10px] opacity-70`}>
+            <div
+              className={`mb-1 pb-1 border-b ${
+                gifUrl
+                  ? 'border-emerald-900/40 px-2 pt-1'
+                  : isMe
+                    ? 'border-[#07100c]/20'
+                    : 'border-emerald-900/40'
+              } text-[10px] opacity-70`}
+            >
               <p className="font-medium">↩ {message.reply_to_name}</p>
-              <p className="truncate">{message.reply_to_message}</p>
+              <p className="truncate">{getDisplayMessage(message.reply_to_message)}</p>
             </div>
           )}
-          <p className="whitespace-pre-wrap break-words">{message.message}</p>
+
+          {gifUrl ? (
+            <img
+              src={gifUrl}
+              alt="GIF"
+              className="rounded-xl object-cover"
+              style={{
+                width: 150,
+                height: 150,
+                maxWidth: '100%',
+              }}
+              loading="lazy"
+            />
+          ) : (
+            <p className="whitespace-pre-wrap break-words">{message.message}</p>
+          )}
         </div>
+
         {showActions && (
           <button
-            onClick={(e) => { e.stopPropagation(); onReply(); setShowActions(false); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              onReply();
+              setShowActions(false);
+            }}
             className="ml-2 text-[10px] text-emerald-200/60 hover:text-amber-200 transition"
           >
             ↩ Reply
@@ -304,4 +526,23 @@ function MessageRow({ message, isMe, myPlayerId, onReply }) {
       </div>
     </div>
   );
+}
+
+function getGifUrl(messageText) {
+  const text = (messageText || '').trim();
+
+  if (text.startsWith('GIF::')) {
+    return text.slice(5);
+  }
+
+  return null;
+}
+
+function getDisplayMessage(messageText) {
+  const gifUrl = getGifUrl(messageText);
+  return gifUrl ? 'GIF' : messageText;
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
