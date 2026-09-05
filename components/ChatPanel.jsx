@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase';
 import Avatar from './Avatar';
 import { notifyDhanushMention } from '@/lib/notify';
 
-const MESSAGE_LIMIT = 50;
+const MESSAGE_LIMIT = 300;
 const GIPHY_API_KEY = process.env.NEXT_PUBLIC_GIPHY_API_KEY;
 
 // Hook: subscribes to chat for a room
@@ -192,7 +192,7 @@ export function ChatPanel({
       const res = await fetch(
   `https://api.giphy.com/v1/gifs/search?api_key=${GIPHY_API_KEY}&q=${encodeURIComponent(
     cleanQuery
-  )}&limit=50&rating=r`
+  )}&limit=50&rating=pg-13`
 );
 
       const json = await res.json();

@@ -2660,7 +2660,6 @@ function ConfettiBurst() {
 // ──────────────────────────────────────────────────────────
 // PlayTable
 // ──────────────────────────────────────────────────────────
-
 function getCircularSeatPositions(count, isMobile) {
   const radiusX = isMobile
     ? count >= 10
@@ -2688,7 +2687,8 @@ function getCircularSeatPositions(count, isMobile) {
 
   return Array.from({ length: count }, (_, i) => {
     // relative index 0 is always you at the bottom
-    const angle = (90 + (i * 360) / count) * (Math.PI / 180);
+    // minus direction keeps the old clockwise table direction
+    const angle = (90 - (i * 360) / count) * (Math.PI / 180);
 
     return {
       l: clampPercent(50 + Math.cos(angle) * radiusX, 4, 96),
