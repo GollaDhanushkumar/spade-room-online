@@ -34,6 +34,7 @@ import CardBack from '@/components/CardBack';
 import { useEmojiReactions, EmojiPicker, FloatingEmoji } from '@/components/EmojiBurst';
 import { useChat, ChatPanel } from '@/components/ChatPanel';
 import { useBackButtonExit } from '@/lib/useBackButtonExit';
+import ThemeBackgroundEffects from '@/components/ThemeBackgroundEffects';
 
 // Detect mobile for responsive table sizing
 function useIsMobile() {
@@ -1540,6 +1541,7 @@ function SpectatorLeaveButton() {
 
         <main className="min-h-screen text-emerald-50 px-5 py-7"
         style={{ background: `linear-gradient(to bottom, var(--theme-bg-from, #0a1410), var(--theme-bg-to, #0f3d2c))` }}>
+          <ThemeBackgroundEffects room={room} />
          {(round?.trick_history?.length ?? 0) > 0 && (
   <button
     onClick={() => setShowTricksWon(true)}
@@ -1664,6 +1666,7 @@ function SpectatorLeaveButton() {
 <DeclareWinnerVoteBox />
       <main className="min-h-screen text-emerald-50 px-5 py-7"
         style={{ background: `linear-gradient(to bottom, var(--theme-bg-from, #0a1410), var(--theme-bg-to, #0f3d2c))` }}>
+          <ThemeBackgroundEffects room={room} />
         {(round?.trick_history?.length ?? 0) > 0 && (
   <button
     onClick={() => setShowTricksWon(true)}
@@ -1941,6 +1944,7 @@ function SpectatorLeaveButton() {
 <DeclareWinnerVoteBox />
       <main className="min-h-screen text-emerald-50 px-5 py-7"
         style={{ background: `linear-gradient(to bottom, var(--theme-bg-from, #0a1410), var(--theme-bg-to, #0f3d2c))` }}>
+          <ThemeBackgroundEffects room={room} />
         {(round?.trick_history?.length ?? 0) > 0 && (
   <button
     onClick={() => setShowTricksWon(true)}
@@ -2091,6 +2095,7 @@ function SpectatorLeaveButton() {
 <DeclareWinnerVoteBox />
         <main className="min-h-screen text-emerald-50 px-3 py-5 flex flex-col"
         style={{ background: `linear-gradient(to bottom, var(--theme-bg-from, #0a1410), var(--theme-bg-to, #0f3d2c))` }}>
+          <ThemeBackgroundEffects room={room} />
          {(round?.trick_history?.length ?? 0) > 0 && (
   <button
     onClick={() => setShowTricksWon(true)}
@@ -2194,6 +2199,7 @@ function SpectatorLeaveButton() {
 <DeclareWinnerVoteBox />
       <main className="min-h-screen text-emerald-50 px-3 py-5 flex flex-col"
         style={{ background: `linear-gradient(to bottom, var(--theme-bg-from, #0a1410), var(--theme-bg-to, #0f3d2c))` }}>
+          <ThemeBackgroundEffects room={room} />
        {(round?.trick_history?.length ?? 0) > 0 && (
   <button
     onClick={() => setShowTricksWon(true)}
@@ -2420,6 +2426,7 @@ function GameOverScreen({
   return (
    <main className="min-h-screen text-emerald-50 px-5 py-7 relative overflow-hidden"
       style={{ background: `linear-gradient(to bottom, var(--theme-bg-from, #0a1410), var(--theme-bg-to, #0f3d2c))` }}>
+        <ThemeBackgroundEffects room={room} />
       {showConfetti && <ConfettiBurst />}
 
       <div className="max-w-md mx-auto relative z-10">

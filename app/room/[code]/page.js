@@ -26,6 +26,7 @@ import { notifyDhanush } from '@/lib/notify';
 import { useChat, ChatPanel } from '@/components/ChatPanel';
 import { useBackButtonExit } from '@/lib/useBackButtonExit';
 import { useEmojiReactions, EmojiPicker, FloatingEmoji } from '@/components/EmojiBurst';
+import ThemeBackgroundEffects from '@/components/ThemeBackgroundEffects';
 
 export default function RoomPage({ params }) {
   const { code } = use(params);
@@ -510,6 +511,7 @@ export default function RoomPage({ params }) {
         background: `linear-gradient(to bottom, var(--theme-bg-from, #0a1410), var(--theme-bg-to, #0f3d2c))`,
       }}
     >
+      <ThemeBackgroundEffects room={room} />
       <ThemeAnimation room={room} />
 
       <VoicePanel

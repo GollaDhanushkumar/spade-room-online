@@ -22,6 +22,7 @@ import { useSounds } from '@/lib/useSounds';
 import { useVoiceChat } from '@/lib/useVoiceChat';
 import { useBackButtonExit } from '@/lib/useBackButtonExit';
 import CardBack from '@/components/CardBack';
+import ThemeBackgroundEffects from '@/components/ThemeBackgroundEffects';
 
 export default function SeatingPage({ params }) {
   const { code } = use(params);
@@ -314,8 +315,10 @@ const ties = findTiedGroups(activeSeats);
       <main className="min-h-screen flex items-center justify-center bg-[#0a1410] text-emerald-200">
         Loading...
       </main>
+      
     );
   }
+
 
   const drawsStarted = activeSeats.some((s) => s.cards && s.cards.length > 0);
   const canBack = iAmHost && (game?.draw_method === 'auto' ? game?.status === 'seating' : !drawsStarted);
@@ -349,9 +352,16 @@ if (fullyResolved) {
     (mySeat.cards.length === 0 || iNeedTieBreaker);
 
   return (
-    <main className="min-h-screen text-emerald-50 px-6 py-8"
-      style={{ background: `linear-gradient(to bottom, var(--theme-bg-from, #0a1410), var(--theme-bg-to, #0f3d2c))` }}>
-     <SoundToggle enabled={sounds.enabled} onToggle={sounds.toggle} className="fixed top-3 left-3 z-30" />
+  <main
+    className="min-h-screen text-emerald-50 px-6 py-8 relative overflow-hidden"
+    style={{
+      background: `linear-gradient(to bottom, var(--theme-bg-from, #0a1410), var(--theme-bg-to, #0f3d2c))`,
+    }}
+  >
+    <ThemeBackgroundEffects room={room} />
+
+    <div className="relative z-10">
+      <SoundToggle enabled={sounds.enabled} onToggle={sounds.toggle} className="fixed top-3 left-3 z-30" />
       <VoicePanel
         voice={voice}
        players={activeSeats.map((s) => ({ player_id: s.player_id, name: s.name, avatar_id: s.avatar_id }))}
@@ -548,9 +558,10 @@ if (fullyResolved) {
             </div>
           </>
         )}
-      </div>
-    </main>
-  );
+         </div>
+    </div>
+  </main>
+);
 }
 
 // ──────────────────────────────────────────────────────────
