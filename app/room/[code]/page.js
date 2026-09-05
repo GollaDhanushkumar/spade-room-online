@@ -78,7 +78,7 @@ export default function RoomPage({ params }) {
   );
 
   const playerCount = visiblePlayers.filter((p) => !p.is_spectator).length;
-  const teamAvailable = [4, 6, 8].includes(playerCount);
+  const teamAvailable = [4, 6, 8, 10, 12].includes(playerCount);
   const deckOptions = playerCount >= 2 ? deckOptionsForPlayerCount(playerCount) : [1];
   const maxRoundsAvailable = playerCount >= 2 ? maxRoundsFor(playerCount, deckCount) : 13;
 
@@ -333,9 +333,9 @@ export default function RoomPage({ params }) {
       setMaxRounds((prev) => Math.min(prev, maxRoundsFor(count, deckCount)));
     }
 
-    if (![4, 6, 8].includes(count) && mode === 'team') {
-      setMode('individual');
-    }
+    if (![4, 6, 8, 10, 12].includes(count) && mode === 'team') {
+  setMode('individual');
+}
   }, [players, deckCount, mode]);
 
   async function handleLeave() {
@@ -883,7 +883,7 @@ export default function RoomPage({ params }) {
 
               {!teamAvailable && (
                 <p className="text-xs text-emerald-200/40 mt-2">
-                  Team mode needs 4, 6, or 8 players.
+                  Team mode needs 4, 6, 8, 10, or 12 players.
                 </p>
               )}
             </div>
@@ -894,7 +894,7 @@ export default function RoomPage({ params }) {
               </label>
 
               <div className="flex gap-2">
-                {[1, 2].map((n) => (
+                {[1, 2, 3].map((n) => (
                   <button
                     key={n}
                     onClick={() => {

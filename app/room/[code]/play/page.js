@@ -2123,14 +2123,14 @@ function SpectatorLeaveButton() {
 
             {/* Bid summary mini-bar */}
             {isTeamMode ? (
-              <div className="bg-emerald-950/30 border border-emerald-900/50 rounded-xl p-2 mb-3 flex justify-around text-xs">
+              <div className="bg-emerald-950/30 border border-emerald-900/50 rounded-xl p-2 mb-3 flex gap-3 overflow-x-auto text-xs whitespace-nowrap">
                 {teamOrder.map((tId) => {
                   const teamSeats = teamsByTeam[tId] || [];
                   const teamColor = TEAM_COLORS[teamSeats[0]?.team_palette_idx ?? 0];
                   const won = round?.team_tricks_won?.[tId] ?? 0;
                   const bid = teamBids[tId] ?? 0;
                   return (
-                    <div key={tId} className="flex items-center gap-2">
+                    <div key={tId} className="flex items-center gap-2 flex-shrink-0">
                       <span className="w-2 h-2 rounded-full" style={{ background: teamColor }} />
                       <span className="text-emerald-200/70 truncate max-w-[100px]">
                         {teamSeats.map((s) => s.name).join('+')}
@@ -2657,6 +2657,50 @@ function ConfettiBurst() {
 // ──────────────────────────────────────────────────────────
 // PlayTable
 // ──────────────────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────
+// PlayTable
+// ──────────────────────────────────────────────────────────
+
+function getCircularSeatPositions(count, isMobile) {
+  const radiusX = isMobile
+    ? count >= 10
+      ? 45
+      : count >= 8
+        ? 43
+        : 39
+    : count >= 10
+      ? 43
+      : count >= 8
+        ? 41
+        : 38;
+
+  const radiusY = isMobile
+    ? count >= 10
+      ? 41
+      : count >= 8
+        ? 40
+        : 38
+    : count >= 10
+      ? 39
+      : count >= 8
+        ? 38
+        : 36;
+
+  return Array.from({ length: count }, (_, i) => {
+    // relative index 0 is always you at the bottom
+    const angle = (90 + (i * 360) / count) * (Math.PI / 180);
+
+    return {
+      l: clampPercent(50 + Math.cos(angle) * radiusX, 4, 96),
+      t: clampPercent(50 + Math.sin(angle) * radiusY, 7, 93),
+    };
+  });
+}
+
+function clampPercent(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
 function PlayTable({ seats, allHands, mySeat, currentTrick, currentPlayerSeatIdx, revealedWinner, talkingPlayers, reactions, onReact }) {
   const N = seats.length;
   if (N === 0 || !mySeat) return null;
@@ -2666,31 +2710,9 @@ function PlayTable({ seats, allHands, mySeat, currentTrick, currentPlayerSeatIdx
     let relativeIdx = (s.seat_index - mySeatIdx + N) % N;
     return { seat: s, relativeIdx };
   });
-
-  const positionsByN = {
-    2: [{ l: 50, t: 88 }, { l: 50, t: 12 }],
-    3: [{ l: 50, t: 88 }, { l: 88, t: 30 }, { l: 12, t: 30 }],
-    4: [{ l: 50, t: 88 }, { l: 88, t: 50 }, { l: 50, t: 12 }, { l: 12, t: 50 }],
-    5: [{ l: 50, t: 88 }, { l: 88, t: 60 }, { l: 75, t: 15 }, { l: 25, t: 15 }, { l: 12, t: 60 }],
-    6: [{ l: 50, t: 88 }, { l: 88, t: 60 }, { l: 80, t: 18 }, { l: 50, t: 12 }, { l: 20, t: 18 }, { l: 12, t: 60 }],
-    7: [{ l: 50, t: 90 }, { l: 88, t: 65 }, { l: 85, t: 25 }, { l: 62, t: 10 }, { l: 38, t: 10 }, { l: 15, t: 25 }, { l: 12, t: 65 }],
-    8: [{ l: 50, t: 90 }, { l: 85, t: 72 }, { l: 92, t: 40 }, { l: 72, t: 12 }, { l: 50, t: 8 }, { l: 28, t: 12 }, { l: 8, t: 40 }, { l: 15, t: 72 }],
-  };
-  const positions = positionsByN[N] ?? positionsByN[4];
-
-  const trickPosByN = {
-    2: [{ l: 50, t: 65 }, { l: 50, t: 35 }],
-    3: [{ l: 50, t: 65 }, { l: 65, t: 42 }, { l: 35, t: 42 }],
-    4: [{ l: 50, t: 65 }, { l: 65, t: 50 }, { l: 50, t: 35 }, { l: 35, t: 50 }],
-    5: [{ l: 50, t: 65 }, { l: 65, t: 55 }, { l: 60, t: 38 }, { l: 40, t: 38 }, { l: 35, t: 55 }],
-    6: [{ l: 50, t: 65 }, { l: 64, t: 56 }, { l: 60, t: 40 }, { l: 50, t: 35 }, { l: 40, t: 40 }, { l: 36, t: 56 }],
-    7: [{ l: 50, t: 66 }, { l: 64, t: 58 }, { l: 62, t: 44 }, { l: 54, t: 36 }, { l: 46, t: 36 }, { l: 38, t: 44 }, { l: 36, t: 58 }],
-    8: [{ l: 50, t: 66 }, { l: 62, t: 60 }, { l: 64, t: 48 }, { l: 58, t: 38 }, { l: 50, t: 35 }, { l: 42, t: 38 }, { l: 36, t: 48 }, { l: 38, t: 60 }],
-  };
-  const trickPositions = trickPosByN[N] ?? trickPosByN[4];
-
- const isMobile = useIsMobile();
-  const totalTricks = currentTrick.length;
+const isMobile = useIsMobile();
+const positions = getCircularSeatPositions(N, isMobile);
+const totalTricks = currentTrick.length;
   // Felt scales slightly bigger for more players to give cards more room.
   // On mobile, felt is larger and cards/ring are smaller so nothing overflows.
   const feltSize = isMobile
@@ -2792,8 +2814,8 @@ function PlayTable({ seats, allHands, mySeat, currentTrick, currentPlayerSeatIdx
 
 function PlayerSeat({ seat, isMe, isTurn, isWinningSeat, cardCount, teamColor }) {
   const showPile = !isMe;
-  const fanCount = Math.min(cardCount, 7);
-  const overlap = cardCount > 5 ? 8 : 12;
+const fanCount = Math.min(cardCount, 4);
+const overlap = 7;
 
   return (
     <div
@@ -2865,7 +2887,7 @@ function PlayerSeat({ seat, isMe, isTurn, isWinningSeat, cardCount, teamColor })
             background: isWinningSeat ? '#f5d989' : isTurn ? 'rgba(245, 217, 137, 0.95)' : 'rgba(7, 16, 12, 0.92)',
             color: (isWinningSeat || isTurn) ? '#07100c' : '#ecfdf5',
             border: teamColor ? `1.5px solid ${teamColor}` : '1px solid rgba(34, 78, 60, 0.6)',
-            maxWidth: 90,
+            maxWidth: 74,
             overflow: 'hidden',
             textOverflow: 'ellipsis',
           }}>

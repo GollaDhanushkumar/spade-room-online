@@ -17,8 +17,9 @@ import { TEAM_COLORS } from '@/lib/game-logic';
   // Layout constants (viewBox is 100×100 percent)
   const cx = 50;
   const cy = 50;
-  const feltR = 28;
-  const seatR = 40;
+  const compact = N >= 10;
+const feltR = compact ? 25 : 28;
+const seatR = compact ? 43 : 40;
 
   // Team partner lines through center
   const teamLines = [];
@@ -176,7 +177,7 @@ import { TEAM_COLORS } from '@/lib/game-logic';
                   {idx > 0 && (
                     <span className="text-amber-300/70 text-[9px] font-bold">+</span>
                   )}
-                  <PlayingCard card={c} size="sm" />
+                  <PlayingCard card={c} size={compact ? 'xs' : 'sm'} />
                 </div>
               ))}
             </div>
@@ -189,12 +190,12 @@ import { TEAM_COLORS } from '@/lib/game-logic';
                 border: teamColor
                   ? `1.5px solid ${teamColor}`
                   : '1px solid rgba(34, 78, 60, 0.6)',
-                maxWidth: 90,
+                maxWidth: compact ? 68 : 90,
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
               }}
             >
-              {truncate(seat.name)}
+              {truncate(seat.name, compact ? 7 : 10)}
               {isMe && <span className="opacity-50 text-[9px] ml-1">(you)</span>}
             </div>
 
