@@ -1499,19 +1499,20 @@ function SpectatorLeaveButton() {
 <DeclareWinnerVoteBox />
       {iAmSpectator && <SpectatorBadge className="fixed top-3 right-3 z-40" />}
       <GameOverScreen
-        code={code}
-        isTeamMode={isTeamMode}
-        teamOrder={teamOrder}
-        teamsByTeam={teamsByTeam}
-        seatedPlayers={seatedPlayers}
-        allRounds={allRounds}
-        iAmHost={iAmHost}
-        iAmSpectator={iAmSpectator}
-        myPlayerId={me?.playerId}
-        onPlayAgain={handlePlayAgain}
-        onLeaveRoom={handleLeaveRoom}
-        playingAgain={playingAgain}
-      />
+  code={code}
+  room={room}
+  isTeamMode={isTeamMode}
+  teamOrder={teamOrder}
+  teamsByTeam={teamsByTeam}
+  seatedPlayers={seatedPlayers}
+  allRounds={allRounds}
+  iAmHost={iAmHost}
+  iAmSpectator={iAmSpectator}
+  myPlayerId={me?.playerId}
+  onPlayAgain={handlePlayAgain}
+  onLeaveRoom={handleLeaveRoom}
+  playingAgain={playingAgain}
+/>
       <MatchOverlay {...overlayProps} />{showTricksWon && (
         <TricksWonModal
           onClose={() => setShowTricksWon(false)}
@@ -2380,7 +2381,7 @@ function SpectatorLeaveButton() {
 // GameOverScreen — confetti, final ranking, totals, round-by-round
 // ──────────────────────────────────────────────────────────
 function GameOverScreen({
-  code, isTeamMode, teamOrder, teamsByTeam, seatedPlayers, allRounds,
+  code, room, isTeamMode, teamOrder, teamsByTeam, seatedPlayers, allRounds,
   iAmHost, iAmSpectator, myPlayerId, onPlayAgain, onLeaveRoom, playingAgain,
 }) {
   const [showConfetti, setShowConfetti] = useState(true);
