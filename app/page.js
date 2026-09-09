@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { pickRandomAvatar, getAvatarById } from '@/lib/avatars';
+import { pickRandomAvatar, getAvatarById, getSecretFlipAvatarId } from '@/lib/avatars';
 import AvatarPicker from '@/components/AvatarPicker';
 import Avatar from '@/components/Avatar';
 import InstallAppButton from '@/components/InstallAppButton';
@@ -516,7 +516,16 @@ export default function HomePage() {
             </label>
 
             <div className="flex items-center gap-3 mb-3">
-              <Avatar avatarId={selectedAvatarId} playerName={name} size="lg" />
+              <Avatar
+  avatarId={selectedAvatarId}
+  playerName={name}
+  size="lg"
+  canDoubleTap={!!getSecretFlipAvatarId(selectedAvatarId)}
+  onDoubleTap={() => {
+    const nextId = getSecretFlipAvatarId(selectedAvatarId);
+    if (nextId) setSelectedAvatarId(nextId);
+  }}
+/>
 
               <div className="flex-1">
                 <p className="text-sm text-emerald-100">

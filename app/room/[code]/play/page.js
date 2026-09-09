@@ -35,6 +35,7 @@ import { useEmojiReactions, EmojiPicker, FloatingEmoji } from '@/components/Emoj
 import { useChat, ChatPanel } from '@/components/ChatPanel';
 import { useBackButtonExit } from '@/lib/useBackButtonExit';
 import ThemeBackgroundEffects from '@/components/ThemeBackgroundEffects';
+import { getSecretFlipAvatarId } from '@/lib/avatars';
 
 // Detect mobile for responsive table sizing
 function useIsMobile() {
@@ -375,7 +376,23 @@ setPlayers(playerRows || []);
     if (cancelled || !playerRows) return;
 
     setPlayers(playerRows);
-    setHostId(playerRows.find((p) => p.is_host)?.id ?? null);
+setHostId(playerRows.find((p) => p.is_host)?.id ?? null);
+
+const latestPlayerMap = new Map(playerRows.map((p) => [p.id, p]));
+
+setSeats((prev) =>
+  prev.map((seat) => {
+    const latestPlayer = latestPlayerMap.get(seat.player_id);
+
+    if (!latestPlayer) return seat;
+
+    return {
+      ...seat,
+      name: latestPlayer.name ?? seat.name,
+      avatar_id: latestPlayer.avatar_id ?? seat.avatar_id,
+    };
+  })
+);
   }
 )
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `code=eq.${code}` },
@@ -409,6 +426,48 @@ const N = seatedPlayers.length;
 const isTeamMode = game?.mode === 'team';
 const direction = game?.direction ?? 'asc';
 const cardsThisRound = game ? cardsForRound(game.current_round, game.max_rounds, direction) : 0;
+
+async function handleMyAvatarSecretFlip() {
+  if (!me?.playerId || !mySeat) return;
+
+  const nextAvatarId = getSecretFlipAvatarId(mySeat.avatar_id);
+  if (!nextAvatarId) return;
+
+  const { error } = await supabase
+    .from('players')
+    .update({ avatar_id: nextAvatarId })
+    .eq('id', me.playerId)
+    .eq('room_code', code);
+
+  if (error) {
+    console.error('Could not flip secret avatar:', error.message);
+    return;
+  }
+
+  setSeats((prev) =>
+    prev.map((seat) =>
+      seat.player_id === me.playerId
+        ? { ...seat, avatar_id: nextAvatarId }
+        : seat
+    )
+  );
+
+  setPlayers((prev) =>
+    prev.map((p) =>
+      p.id === me.playerId ? { ...p, avatar_id: nextAvatarId } : p
+    )
+  );
+
+  setMe((prev) => {
+    if (!prev) return prev;
+
+    const updated = { ...prev, avatarId: nextAvatarId };
+
+    localStorage.setItem(`spade-room-${code}`, JSON.stringify(updated));
+
+    return updated;
+  });
+}
 
 function getNextActiveSeatIndex(fromSeatIndex) {
   const ordered = [...seatedPlayers].sort(
@@ -2295,16 +2354,19 @@ function SpectatorLeaveButton() {
           )}
 
          <PlayTable
-            seats={seatedPlayers}
-            allHands={allHands}
-            mySeat={mySeat}
-            currentTrick={currentTrick}
-            currentPlayerSeatIdx={currentPlayerSeatIdx}
-            revealedWinner={revealedWinner}
-            talkingPlayers={voice.talkingPlayers}
-            reactions={activeReactions}
-            onReact={(t) => setEmojiTarget(t)}
-          />
+  seats={seatedPlayers.map((s) => ({
+    ...s,
+    _onSecretFlip: s.player_id === me?.playerId ? handleMyAvatarSecretFlip : undefined,
+  }))}
+  allHands={allHands}
+  mySeat={mySeat}
+  currentTrick={currentTrick}
+  currentPlayerSeatIdx={currentPlayerSeatIdx}
+  revealedWinner={revealedWinner}
+  talkingPlayers={voice.talkingPlayers}
+  reactions={activeReactions}
+  onReact={(t) => setEmojiTarget(t)}
+/>
 
           <div className="bg-emerald-950/30 border border-emerald-900/60 rounded-2xl p-3 mt-3">
             <p className="text-xs uppercase tracking-widest text-emerald-200/60 text-center mb-2">
@@ -2793,19 +2855,20 @@ const totalTricks = currentTrick.length;
               zIndex: isWinningSeat ? 8 : 3,
             }}>
            <PlayerSeat
-              seat={{
-                ...seat,
-                _talking: talkingPlayers?.has(seat.player_id) ?? false,
-                _reaction: reactions?.[seat.player_id]?.emoji,
-                _reactionFrom: reactions?.[seat.player_id]?.fromName,
-                _onReact: onReact,
-              }}
-              isMe={isMe}
-              isTurn={isTurn}
-              isWinningSeat={isWinningSeat}
-              cardCount={cardCount}
-              teamColor={teamColor}
-            />
+  seat={{
+    ...seat,
+    _talking: talkingPlayers?.has(seat.player_id) ?? false,
+    _reaction: reactions?.[seat.player_id]?.emoji,
+    _reactionFrom: reactions?.[seat.player_id]?.fromName,
+    _onReact: onReact,
+    _onSecretFlip: seat._onSecretFlip,
+  }}
+  isMe={isMe}
+  isTurn={isTurn}
+  isWinningSeat={isWinningSeat}
+  cardCount={cardCount}
+  teamColor={teamColor}
+/>
           </div>
         );
       })}
@@ -2870,15 +2933,26 @@ const overlap = 7;
      <div className="flex items-center gap-1.5 mt-1">
         <button
           onClick={(e) => {
-            e.stopPropagation();
-            const rect = e.currentTarget.getBoundingClientRect();
-            seat._onReact?.({ playerId: seat.player_id, name: seat.name, rect });
-          }}
+  e.stopPropagation();
+
+  if (isMe && getSecretFlipAvatarId(seat.avatar_id)) return;
+
+  const rect = e.currentTarget.getBoundingClientRect();
+  seat._onReact?.({ playerId: seat.player_id, name: seat.name, rect });
+}}
           className="relative cursor-pointer hover:scale-110 active:scale-95 transition-transform"
           title="Send a reaction"
         >
-          <Avatar avatarId={seat.avatar_id} playerName={seat.name} size="xs" borderColor={teamColor} />
+          <Avatar
+  avatarId={seat.avatar_id}
+  playerName={seat.name}
+  size="xs"
+  borderColor={teamColor}
+  canDoubleTap={isMe && !!getSecretFlipAvatarId(seat.avatar_id)}
+  onDoubleTap={isMe ? seat._onSecretFlip : undefined}
+/>
           {seat._talking && (
+      
             <span
               className="absolute inset-0 rounded-full pointer-events-none"
               style={{

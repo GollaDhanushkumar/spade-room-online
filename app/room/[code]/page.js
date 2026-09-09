@@ -27,6 +27,7 @@ import { useChat, ChatPanel } from '@/components/ChatPanel';
 import { useBackButtonExit } from '@/lib/useBackButtonExit';
 import { useEmojiReactions, EmojiPicker, FloatingEmoji } from '@/components/EmojiBurst';
 import ThemeBackgroundEffects from '@/components/ThemeBackgroundEffects';
+import { getSecretFlipAvatarId } from '@/lib/avatars';
 
 export default function RoomPage({ params }) {
   const { code } = use(params);
@@ -392,6 +393,40 @@ export default function RoomPage({ params }) {
     } catch {}
   }
 
+  async function handleMyAvatarSecretFlip() {
+  if (!me?.playerId || !myPlayerInRoom) return;
+
+  const nextAvatarId = getSecretFlipAvatarId(myPlayerInRoom.avatar_id);
+  if (!nextAvatarId) return;
+
+  const { error } = await supabase
+    .from('players')
+    .update({ avatar_id: nextAvatarId })
+    .eq('id', me.playerId)
+    .eq('room_code', code);
+
+  if (error) {
+    console.error('Could not flip secret avatar:', error.message);
+    return;
+  }
+
+  setPlayers((prev) =>
+    prev.map((p) =>
+      p.id === me.playerId ? { ...p, avatar_id: nextAvatarId } : p
+    )
+  );
+
+  setMe((prev) => {
+    if (!prev) return prev;
+
+    const updated = { ...prev, avatarId: nextAvatarId };
+
+    localStorage.setItem(`spade-room-${code}`, JSON.stringify(updated));
+
+    return updated;
+  });
+}
+
   async function handleConfirmStart() {
     setStarting(true);
 
@@ -646,13 +681,21 @@ export default function RoomPage({ params }) {
                   <div className="flex items-center gap-3 min-w-0">
                     <button
                       onClick={(e) => {
-                        const rect = e.currentTarget.getBoundingClientRect();
-                        setEmojiTarget({ playerId: p.id, name: p.name, rect });
-                      }}
+  if (isMe && getSecretFlipAvatarId(p.avatar_id)) return;
+
+  const rect = e.currentTarget.getBoundingClientRect();
+  setEmojiTarget({ playerId: p.id, name: p.name, rect });
+}}
                       className="relative cursor-pointer hover:scale-105 active:scale-95 transition-transform"
                       title="Send a reaction"
                     >
-                      <Avatar avatarId={p.avatar_id} playerName={p.name} size="sm" />
+                      <Avatar
+  avatarId={p.avatar_id}
+  playerName={p.name}
+  size="sm"
+  canDoubleTap={isMe && !!getSecretFlipAvatarId(p.avatar_id)}
+  onDoubleTap={isMe ? handleMyAvatarSecretFlip : undefined}
+/>
 
                       {voice.talkingPlayers.has(p.id) && (
                         <span
