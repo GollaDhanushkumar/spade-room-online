@@ -556,7 +556,7 @@ function IndividualRankings({ matches, hiddenSet, iAmHost, editMode, setEditMode
       )}
 
       <p className="text-[10px] text-emerald-200/30 text-center mt-4 leading-relaxed">
-        Stats match by name first (case-insensitive), then avatar.
+       Secret flip avatars count as the same character. Other stats match by name/avatar.
       </p>
     </>
   );
@@ -1059,6 +1059,39 @@ function simpleIdentifier(name) {
   return (name || 'unknown').toLowerCase().trim();
 }
 
+// Secret-flip avatars should count as the same ranking character.
+function getCanonicalRankingAvatarId(avatarId) {
+  const avatarMap = {
+    'friend:sindhu-secret': 'friend:sindhu',
+    'friend:bhavana-secret': 'friend:bhavana',
+  };
+
+  return avatarMap[avatarId] || avatarId || null;
+}
+
+// These avatars are character identities.
+// So name changes should NOT split their rankings.
+function getRankingIdentifier(name, avatarId) {
+  const canonicalAvatarId = getCanonicalRankingAvatarId(avatarId);
+
+  if (canonicalAvatarId === 'friend:sindhu') {
+    return 'avatar:friend:sindhu';
+  }
+
+  if (canonicalAvatarId === 'friend:bhavana') {
+    return 'avatar:friend:bhavana';
+  }
+
+  return simpleIdentifier(name);
+}
+
+function isRemovedPlayer(player, removedSet = new Set()) {
+  const rankingId = getRankingIdentifier(player?.name, player?.avatar_id);
+  const nameId = simpleIdentifier(player?.name);
+
+  return removedSet.has(rankingId) || removedSet.has(nameId);
+}
+
 function matchHasPlayer(match, identifier, removedSet = new Set()) {
   if (!identifier) return false;
 
@@ -1066,11 +1099,15 @@ function matchHasPlayer(match, identifier, removedSet = new Set()) {
   const wanted = String(identifier).toLowerCase().trim();
 
   return playerSnap.some((p) => {
-    const playerIdentifier = simpleIdentifier(p.name);
-    return playerIdentifier === wanted && !removedSet.has(playerIdentifier);
+    const rankingId = getRankingIdentifier(p.name, p.avatar_id);
+    const nameId = simpleIdentifier(p.name);
+
+    return (
+      (rankingId === wanted || nameId === wanted) &&
+      !isRemovedPlayer(p, removedSet)
+    );
   });
 }
-
 function getVisibleIndividualRankingPlayers(matches, hiddenRows = []) {
   const individualMatches = matches.filter((m) => m.mode === 'individual');
 
@@ -1114,17 +1151,33 @@ function getVisibleWinnerInfo(match, removedSet = new Set()) {
     changed: top.label !== originalLabel,
   };
 }
-
 function makeIdentifierResolver() {
-  const seenAvatars = {}; // avatar_id -> identifier
+  const seenAvatars = {}; // canonical avatar_id -> identifier
   const seenIdentifiers = new Set();
 
   return function getIdentifier(name, avatarId) {
-    const lowerName = (name || 'unknown').toLowerCase().trim();
+    const directIdentifier = getRankingIdentifier(name, avatarId);
+
+    // For special character avatars like Sindhu/Bhavana,
+    // always use the avatar identity, not the changing display name.
+    if (directIdentifier.startsWith('avatar:')) {
+      return directIdentifier;
+    }
+
+    const lowerName = directIdentifier;
+    const canonicalAvatarId = getCanonicalRankingAvatarId(avatarId);
+
     if (seenIdentifiers.has(lowerName)) return lowerName;
-    if (avatarId && seenAvatars[avatarId]) return seenAvatars[avatarId];
+    if (canonicalAvatarId && seenAvatars[canonicalAvatarId]) {
+      return seenAvatars[canonicalAvatarId];
+    }
+
     seenIdentifiers.add(lowerName);
-    if (avatarId) seenAvatars[avatarId] = lowerName;
+
+    if (canonicalAvatarId) {
+      seenAvatars[canonicalAvatarId] = lowerName;
+    }
+
     return lowerName;
   };
 }
@@ -1495,7 +1548,7 @@ function MatchDetail({ match, removedSet = new Set(), onBack, onClose }) {
   const winnersCount = ranked.filter((r) => r.total === matchTopScore).length;
   const completedRounds = (match.round_breakdown || []).filter((r) => r.completed);
   const rawMvp = computeMVPFromMatch(match);
-  const mvp = rawMvp && !removedSet.has(simpleIdentifier(rawMvp.member?.name)) ? rawMvp : null;
+  const mvp = rawMvp && !isRemovedPlayer(rawMvp.member, removedSet) ? rawMvp : null;
 
   const date = new Date(match.completed_at);
   const startDate = new Date(match.started_at);
@@ -1696,7 +1749,7 @@ function buildRanking(match, removedSet = new Set()) {
     return (match.team_snapshot || [])
       .map((t) => {
         const visibleMembers = (t.members || []).filter(
-          (m) => !removedSet.has(simpleIdentifier(m.name))
+          (m) => !isRemovedPlayer(m, removedSet)
         );
 
         return {
@@ -1715,7 +1768,7 @@ function buildRanking(match, removedSet = new Set()) {
   }
 
   return (match.player_snapshot || [])
-    .filter((p) => !removedSet.has(simpleIdentifier(p.name)))
+    .filter((p) => !isRemovedPlayer(p, removedSet))
     .map((p) => ({
       id: p.player_id,
       label: p.name,

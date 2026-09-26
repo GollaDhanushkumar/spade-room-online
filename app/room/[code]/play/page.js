@@ -2153,7 +2153,7 @@ function SpectatorLeaveButton() {
 <SpectatorsWatchingBox />
 <SpectatorLeaveButton />
 <DeclareWinnerVoteBox />
-        <main className="min-h-screen text-emerald-50 px-3 py-5 flex flex-col"
+        <main className="min-h-screen text-emerald-50 px-3 py-5 flex flex-col overflow-x-hidden"
         style={{ background: `linear-gradient(to bottom, var(--theme-bg-from, #0a1410), var(--theme-bg-to, #0f3d2c))` }}>
           <ThemeBackgroundEffects room={room} />
          {(round?.trick_history?.length ?? 0) > 0 && (
@@ -2315,43 +2315,64 @@ function SpectatorLeaveButton() {
           )}
 
           {isTeamMode ? (
-            <div className="bg-emerald-950/30 border border-emerald-900/50 rounded-xl p-2 mb-3 flex justify-around text-xs">
-              {teamOrder.map((tId) => {
-                const teamSeats = teamsByTeam[tId] || [];
-                const teamColor = TEAM_COLORS[teamSeats[0]?.team_palette_idx ?? 0];
-                const won = round?.team_tricks_won?.[tId] ?? 0;
-                const bid = teamBids[tId] ?? 0;
-                return (
-                  <div key={tId} className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full" style={{ background: teamColor }} />
-                    <span className="text-emerald-200/70 truncate max-w-[100px]">
-                      {teamSeats.map((s) => s.name).join('+')}
-                    </span>
-                    <span className="font-mono">
-                      <span className="text-amber-200">{won}</span>
-                      <span className="text-emerald-200/40">/{bid}</span>
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="bg-emerald-950/30 border border-emerald-900/50 rounded-xl p-2 mb-3 flex justify-around flex-wrap gap-x-3 gap-y-1 text-xs">
-              {seatedPlayers.map((s) => {
-                const won = round?.tricks_won?.[s.player_id] ?? 0;
-                const bid = bids[s.player_id] ?? 0;
-                return (
-                  <div key={s.player_id} className="flex items-center gap-1.5">
-                    <span className="text-emerald-200/70 truncate max-w-[60px]">{s.name}</span>
-                    <span className="font-mono">
-                      <span className="text-amber-200">{won}</span>
-                      <span className="text-emerald-200/40">/{bid}</span>
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+  <div className="mb-3 -mx-3 px-3 overflow-x-auto no-scrollbar">
+    <div className="flex gap-2 min-w-max pb-1">
+      {teamOrder.map((tId, orderIdx) => {
+        const teamSeats = teamsByTeam[tId] || [];
+        const teamColor = TEAM_COLORS[teamSeats[0]?.team_palette_idx ?? orderIdx];
+        const won = round?.team_tricks_won?.[tId] ?? 0;
+        const bid = teamBids[tId] ?? 0;
+        const teamName = teamSeats.map((s) => s.name).join(' + ');
+
+        return (
+          <div
+            key={tId}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-emerald-950/35 border shrink-0 text-xs"
+            style={{ borderColor: `${teamColor}80` }}
+            title={teamName}
+          >
+            <span
+              className="w-2 h-2 rounded-full shrink-0"
+              style={{ background: teamColor }}
+            />
+            <span className="text-emerald-100/75 truncate max-w-[118px]">
+              {teamName}
+            </span>
+            <span className="font-mono whitespace-nowrap">
+              <span className="text-amber-200 font-bold">{won}</span>
+              <span className="text-emerald-200/40">/{bid}</span>
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  </div>
+) : (
+  <div className="mb-3 -mx-3 px-3 overflow-x-auto no-scrollbar">
+    <div className="flex gap-2 min-w-max pb-1">
+      {seatedPlayers.map((s) => {
+        const won = round?.tricks_won?.[s.player_id] ?? 0;
+        const bid = bids[s.player_id] ?? 0;
+
+        return (
+          <div
+            key={s.player_id}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-emerald-950/35 border border-emerald-900/50 shrink-0 text-xs"
+            title={s.name}
+          >
+            <span className="text-emerald-100/75 truncate max-w-[78px]">
+              {s.name}
+            </span>
+            <span className="font-mono whitespace-nowrap">
+              <span className="text-amber-200 font-bold">{won}</span>
+              <span className="text-emerald-200/40">/{bid}</span>
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  </div>
+)}
 
          <PlayTable
   seats={seatedPlayers.map((s) => ({
@@ -2420,19 +2441,30 @@ function SpectatorLeaveButton() {
         />
       )}
       <ChatPanel
-        isOpen={chat.isOpen}
-        onClose={() => chat.setIsOpen(false)}
-        messages={chat.messages}
-        sendMessage={chat.sendMessage}
-        myPlayerId={me?.playerId}
-        roomPlayers={seatedPlayers.map((s) => ({
-          player_id: s.player_id,
-          name: s.name,
-          avatar_id: s.avatar_id,
-        }))}
-        onSecretCommand={handleSecretChatCommand}
-      />
-      </>
+  isOpen={chat.isOpen}
+  onClose={() => chat.setIsOpen(false)}
+  messages={chat.messages}
+  sendMessage={chat.sendMessage}
+  myPlayerId={me?.playerId}
+  roomPlayers={seatedPlayers.map((s) => ({
+    player_id: s.player_id,
+    name: s.name,
+    avatar_id: s.avatar_id,
+  }))}
+  onSecretCommand={handleSecretChatCommand}
+/>
+
+<style jsx global>{`
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+`}</style>
+</>
     );
   }
 
@@ -2732,73 +2764,122 @@ function ConfettiBurst() {
 // ──────────────────────────────────────────────────────────
 function getCircularSeatPositions(count, isMobile) {
   const radiusX = isMobile
-    ? count >= 10
-      ? 45
-      : count >= 8
-        ? 43
-        : 39
-    : count >= 10
-      ? 43
-      : count >= 8
-        ? 41
-        : 38;
+    ? count >= 12
+      ? 34
+      : count >= 10
+        ? 36
+        : count >= 8
+          ? 38
+          : count >= 6
+            ? 39
+            : 40
+    : count >= 12
+      ? 41
+      : count >= 10
+        ? 42
+        : count >= 8
+          ? 40
+          : 38;
 
   const radiusY = isMobile
-    ? count >= 10
-      ? 41
-      : count >= 8
-        ? 40
-        : 38
-    : count >= 10
-      ? 39
-      : count >= 8
-        ? 38
-        : 36;
+    ? count >= 12
+      ? 34
+      : count >= 10
+        ? 35
+        : count >= 8
+          ? 37
+          : count >= 6
+            ? 38
+            : 39
+    : count >= 12
+      ? 38
+      : count >= 10
+        ? 39
+        : count >= 8
+          ? 38
+          : 36;
 
   return Array.from({ length: count }, (_, i) => {
-    // relative index 0 is always you at the bottom
-    // minus direction keeps the old clockwise table direction
     const angle = (90 - (i * 360) / count) * (Math.PI / 180);
 
     return {
-      l: clampPercent(50 + Math.cos(angle) * radiusX, 4, 96),
-      t: clampPercent(50 + Math.sin(angle) * radiusY, 7, 93),
+      l: clampPercent(50 + Math.cos(angle) * radiusX, 7, 93),
+      t: clampPercent(50 + Math.sin(angle) * radiusY, 8, 92),
     };
   });
 }
-
 function clampPercent(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
-
-function PlayTable({ seats, allHands, mySeat, currentTrick, currentPlayerSeatIdx, revealedWinner, talkingPlayers, reactions, onReact }) {
+function PlayTable({
+  seats,
+  allHands,
+  mySeat,
+  currentTrick,
+  currentPlayerSeatIdx,
+  revealedWinner,
+  talkingPlayers,
+  reactions,
+  onReact,
+}) {
   const N = seats.length;
   if (N === 0 || !mySeat) return null;
 
   const mySeatIdx = mySeat.seat_index;
+
   const positioned = seats.map((s) => {
-    let relativeIdx = (s.seat_index - mySeatIdx + N) % N;
+    const relativeIdx = (s.seat_index - mySeatIdx + N) % N;
     return { seat: s, relativeIdx };
   });
-const isMobile = useIsMobile();
-const positions = getCircularSeatPositions(N, isMobile);
-const totalTricks = currentTrick.length;
-  // Felt scales slightly bigger for more players to give cards more room.
-  // On mobile, felt is larger and cards/ring are smaller so nothing overflows.
+
+  const isMobile = useIsMobile();
+  const positions = getCircularSeatPositions(N, isMobile);
+
+  const compact = N >= 8;
+  const ultraCompact = N >= 10;
+
+  const tableMinHeight = isMobile
+    ? ultraCompact
+      ? 360
+      : compact
+        ? 380
+        : N >= 6
+          ? 400
+          : 420
+    : 520;
+
   const feltSize = isMobile
-    ? (N <= 4 ? 62 : N <= 6 ? 70 : 76)
-    : (N <= 4 ? 52 : N <= 6 ? 58 : 62);
-  const ringRadius = isMobile
-    ? (N <= 4 ? 12 : N <= 6 ? 14 : 16)
-    : (N <= 4 ? 14 : N <= 6 ? 17 : 19);
-  const cardSize = isMobile ? 'sm' : (N <= 4 ? 'md' : 'sm');
+    ? ultraCompact
+      ? 60
+      : compact
+        ? 64
+        : N >= 6
+          ? 68
+          : 70
+    : ultraCompact
+      ? 56
+      : compact
+        ? 58
+        : 60;
+
+  const cardSize = isMobile ? 'sm' : N <= 4 ? 'md' : 'sm';
 
   return (
-    <div className="relative w-full flex-1" style={{ minHeight: 380 }}>
-      <div className="absolute"
+    <div
+      className="relative w-full flex-1 overflow-hidden"
+      style={{
+        minHeight: tableMinHeight,
+        maxWidth: '100%',
+      }}
+    >
+      <div
+        className="absolute"
         style={{
-          left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
-          width: `${feltSize}%`, aspectRatio: '1',
+          left: '50%',
+          top: '50%',
+          transform: 'translate(-50%, -50%)',
+          width: `${feltSize}%`,
+          aspectRatio: '1',
           borderRadius: '50%',
           background: `radial-gradient(circle at 50% 45%, var(--theme-felt-from, #1f5e44) 0%, var(--theme-felt-mid, #0f3d2c) 60%, var(--theme-felt-to, #0a2519) 100%)`,
           border: '1px solid rgba(212, 182, 117, 0.35)',
@@ -2807,29 +2888,37 @@ const totalTricks = currentTrick.length;
       />
 
       {currentTrick.map((entry, i) => {
-        // Place card between the player's seat and the center of the table,
-        // so it appears in front of the player who actually played it.
         const playerRelIdx = (entry.seat_index - mySeatIdx + N) % N;
         const seatPos = positions[playerRelIdx] ?? { l: 50, t: 50 };
-        const towardCenter = 0.65; // 0 = at seat, 1 = at center
+        const towardCenter = ultraCompact ? 0.72 : compact ? 0.68 : 0.65;
         const left = seatPos.l + (50 - seatPos.l) * towardCenter;
         const top = seatPos.t + (50 - seatPos.t) * towardCenter;
         const isWinner = revealedWinner && revealedWinner.player_id === entry.player_id;
+
         return (
-          <div key={`played-${i}`}
+          <div
+            key={`played-${i}`}
             className="absolute"
             style={{
-              left: `${left}%`, top: `${top}%`,
+              left: `${left}%`,
+              top: `${top}%`,
               transform: 'translate(-50%, -50%)',
               animation: 'cardSlideIn 0.3s ease both',
               zIndex: 10 + i,
-            }}>
-            <div style={isWinner ? {
-              boxShadow: '0 0 0 3px #f5d989, 0 0 28px rgba(245,217,137,0.8)',
-              borderRadius: 10,
-              transform: 'translateY(-4px)',
-              transition: 'all 0.3s',
-            } : undefined}>
+            }}
+          >
+            <div
+              style={
+                isWinner
+                  ? {
+                      boxShadow: '0 0 0 3px #f5d989, 0 0 28px rgba(245,217,137,0.8)',
+                      borderRadius: 10,
+                      transform: 'translateY(-4px)',
+                      transition: 'all 0.3s',
+                    }
+                  : undefined
+              }
+            >
               <PlayingCard card={entry.card} size={cardSize} />
             </div>
           </div>
@@ -2839,120 +2928,167 @@ const totalTricks = currentTrick.length;
       {positioned.map(({ seat, relativeIdx }) => {
         const pos = positions[relativeIdx];
         if (!pos) return null;
+
         const isMe = seat.player_id === mySeat.player_id;
-        const isTurn = seat.seat_index === currentPlayerSeatIdx && currentTrick.length < N && !revealedWinner;
+        const isTurn =
+          seat.seat_index === currentPlayerSeatIdx &&
+          currentTrick.length < N &&
+          !revealedWinner;
         const isWinningSeat = revealedWinner && revealedWinner.player_id === seat.player_id;
         const handRow = allHands.find((h) => h.player_id === seat.player_id);
         const cardCount = handRow?.cards?.length ?? 0;
-        const teamColor = seat.team_palette_idx != null ? TEAM_COLORS[seat.team_palette_idx] : null;
+        const teamColor =
+          seat.team_palette_idx != null ? TEAM_COLORS[seat.team_palette_idx] : null;
 
         return (
-          <div key={seat.player_id}
+          <div
+            key={seat.player_id}
             className="absolute"
             style={{
-              left: `${pos.l}%`, top: `${pos.t}%`,
+              left: `${pos.l}%`,
+              top: `${pos.t}%`,
               transform: 'translate(-50%, -50%)',
               zIndex: isWinningSeat ? 8 : 3,
-            }}>
-           <PlayerSeat
-  seat={{
-    ...seat,
-    _talking: talkingPlayers?.has(seat.player_id) ?? false,
-    _reaction: reactions?.[seat.player_id]?.emoji,
-    _reactionFrom: reactions?.[seat.player_id]?.fromName,
-    _onReact: onReact,
-    _onSecretFlip: seat._onSecretFlip,
-  }}
-  isMe={isMe}
-  isTurn={isTurn}
-  isWinningSeat={isWinningSeat}
-  cardCount={cardCount}
-  teamColor={teamColor}
-/>
+            }}
+          >
+            <PlayerSeat
+              seat={{
+                ...seat,
+                _talking: talkingPlayers?.has(seat.player_id) ?? false,
+                _reaction: reactions?.[seat.player_id]?.emoji,
+                _reactionFrom: reactions?.[seat.player_id]?.fromName,
+                _onReact: onReact,
+                _onSecretFlip: seat._onSecretFlip,
+              }}
+              isMe={isMe}
+              isTurn={isTurn}
+              isWinningSeat={isWinningSeat}
+              cardCount={cardCount}
+              teamColor={teamColor}
+              compact={compact}
+              ultraCompact={ultraCompact}
+            />
           </div>
         );
       })}
 
       <style jsx>{`
         @keyframes cardSlideIn {
-          from { opacity: 0; transform: translate(-50%, -50%) scale(0.7); }
-          to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+          from {
+            opacity: 0;
+            transform: translate(-50%, -50%) scale(0.7);
+          }
+          to {
+            opacity: 1;
+            transform: translate(-50%, -50%) scale(1);
+          }
         }
       `}</style>
     </div>
   );
 }
-
-function PlayerSeat({ seat, isMe, isTurn, isWinningSeat, cardCount, teamColor }) {
+function PlayerSeat({
+  seat,
+  isMe,
+  isTurn,
+  isWinningSeat,
+  cardCount,
+  teamColor,
+  compact = false,
+  ultraCompact = false,
+}) {
   const showPile = !isMe;
-const fanCount = Math.min(cardCount, 4);
-const overlap = 7;
+  const fanCount = Math.min(cardCount, ultraCompact ? 3 : 4);
+  const overlap = ultraCompact ? 5 : compact ? 6 : 7;
+
+  const pileCardWidth = ultraCompact ? 30 : compact ? 33 : 36;
+  const pileCardHeight = ultraCompact ? 42 : compact ? 46 : 50;
+  const pileWidth = fanCount > 0 ? pileCardWidth + (fanCount - 1) * overlap : pileCardWidth;
+
+  const nameMaxWidth = ultraCompact ? 56 : compact ? 64 : 74;
+  const nameLimit = ultraCompact ? 7 : compact ? 8 : 9;
 
   return (
     <div
-      className="flex flex-col items-center gap-1"
+      className="flex flex-col items-center gap-0.5"
       style={{
         animation: isTurn ? 'turnPulse 1.4s ease-in-out infinite' : undefined,
-        padding: 4,
+        padding: ultraCompact ? 2 : 4,
         borderRadius: 12,
         background: isWinningSeat ? 'rgba(245, 217, 137, 0.12)' : 'transparent',
         boxShadow: isWinningSeat
           ? '0 0 0 2px #f5d989, 0 0 30px rgba(245,217,137,0.7)'
           : undefined,
         transition: 'box-shadow 0.3s, background 0.3s',
-      }}>
+      }}
+    >
       {showPile && (
-        <div className="relative" style={{
-          width: fanCount > 0 ? 36 + (fanCount - 1) * overlap : 50,
-          height: 50,
-        }}>
+        <div
+          className="relative"
+          style={{
+            width: pileWidth,
+            height: pileCardHeight,
+          }}
+        >
           {cardCount > 0 ? (
             Array.from({ length: fanCount }).map((_, i) => (
-              <div key={i} className="absolute" style={{
-                left: i * overlap,
-                top: 0,
-                transform: `rotate(${(i - (fanCount - 1) / 2) * 4}deg)`,
-                transformOrigin: 'bottom center',
-                zIndex: i,
-              }}>
+              <div
+                key={i}
+                className="absolute"
+                style={{
+                  left: i * overlap,
+                  top: 0,
+                  transform: `rotate(${(i - (fanCount - 1) / 2) * 4}deg)`,
+                  transformOrigin: 'bottom center',
+                  zIndex: i,
+                }}
+              >
                 <PlayingCard faceDown size="sm" />
               </div>
             ))
           ) : (
-            <div style={{
-              width: 36, height: 50,
-              border: '1px dashed rgba(255,255,255,0.15)',
-              borderRadius: 6,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: 'rgba(255,255,255,0.2)', fontSize: 9,
-            }}>empty</div>
+            <div
+              style={{
+                width: pileCardWidth,
+                height: pileCardHeight,
+                border: '1px dashed rgba(255,255,255,0.15)',
+                borderRadius: 6,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'rgba(255,255,255,0.2)',
+                fontSize: 9,
+              }}
+            >
+              empty
+            </div>
           )}
         </div>
       )}
 
-     <div className="flex items-center gap-1.5 mt-1">
+      <div className="flex items-center gap-1 mt-0.5">
         <button
           onClick={(e) => {
-  e.stopPropagation();
+            e.stopPropagation();
 
-  if (isMe && getSecretFlipAvatarId(seat.avatar_id)) return;
+            if (isMe && getSecretFlipAvatarId(seat.avatar_id)) return;
 
-  const rect = e.currentTarget.getBoundingClientRect();
-  seat._onReact?.({ playerId: seat.player_id, name: seat.name, rect });
-}}
+            const rect = e.currentTarget.getBoundingClientRect();
+            seat._onReact?.({ playerId: seat.player_id, name: seat.name, rect });
+          }}
           className="relative cursor-pointer hover:scale-110 active:scale-95 transition-transform"
           title="Send a reaction"
         >
           <Avatar
-  avatarId={seat.avatar_id}
-  playerName={seat.name}
-  size="xs"
-  borderColor={teamColor}
-  canDoubleTap={isMe && !!getSecretFlipAvatarId(seat.avatar_id)}
-  onDoubleTap={isMe ? seat._onSecretFlip : undefined}
-/>
+            avatarId={seat.avatar_id}
+            playerName={seat.name}
+            size="xs"
+            borderColor={teamColor}
+            canDoubleTap={isMe && !!getSecretFlipAvatarId(seat.avatar_id)}
+            onDoubleTap={isMe ? seat._onSecretFlip : undefined}
+          />
+
           {seat._talking && (
-      
             <span
               className="absolute inset-0 rounded-full pointer-events-none"
               style={{
@@ -2961,27 +3097,44 @@ const overlap = 7;
               }}
             />
           )}
-          {seat._reaction && <FloatingEmoji emoji={seat._reaction} fromName={seat._reactionFrom} />}
+
+          {seat._reaction && (
+            <FloatingEmoji emoji={seat._reaction} fromName={seat._reactionFrom} />
+          )}
         </button>
+
         <div
-          className="px-2 py-0.5 rounded-md text-[11px] font-medium whitespace-nowrap shadow-md"
+          className="px-1.5 py-0.5 rounded-md text-[10px] font-medium whitespace-nowrap shadow-md"
           style={{
-            background: isWinningSeat ? '#f5d989' : isTurn ? 'rgba(245, 217, 137, 0.95)' : 'rgba(7, 16, 12, 0.92)',
-            color: (isWinningSeat || isTurn) ? '#07100c' : '#ecfdf5',
-            border: teamColor ? `1.5px solid ${teamColor}` : '1px solid rgba(34, 78, 60, 0.6)',
-            maxWidth: 74,
+            background: isWinningSeat
+              ? '#f5d989'
+              : isTurn
+                ? 'rgba(245, 217, 137, 0.95)'
+                : 'rgba(7, 16, 12, 0.92)',
+            color: isWinningSeat || isTurn ? '#07100c' : '#ecfdf5',
+            border: teamColor
+              ? `1.5px solid ${teamColor}`
+              : '1px solid rgba(34, 78, 60, 0.6)',
+            maxWidth: nameMaxWidth,
             overflow: 'hidden',
             textOverflow: 'ellipsis',
-          }}>
-          {seat.name?.length > 9 ? seat.name.slice(0, 8) + '…' : seat.name}
+          }}
+          title={seat.name}
+        >
+          {seat.name?.length > nameLimit ? seat.name.slice(0, nameLimit - 1) + '…' : seat.name}
           {isMe && <span className="opacity-50 text-[9px] ml-1">(you)</span>}
         </div>
       </div>
 
       <style jsx>{`
         @keyframes turnPulse {
-          0%, 100% { transform: scale(1); }
-          50%      { transform: scale(1.06); }
+          0%,
+          100% {
+            transform: scale(1);
+          }
+          50% {
+            transform: scale(1.06);
+          }
         }
       `}</style>
     </div>
