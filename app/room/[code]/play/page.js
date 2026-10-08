@@ -985,9 +985,9 @@ async function handleLockIndivBid() {
         dhanushWon = winningSeats.some((s) => isDhanushIdentifier(s.name, s.avatar_id));
       }
 
-      if (dhanushWon) {
-        setTimeout(() => setShowVictoryEgg(true), 3000);
-      }
+      if (!isTeamMode && dhanushWon) {
+  setTimeout(() => setShowVictoryEgg(true), 3000);
+}
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [game?.status, allRounds, seats]);
