@@ -1,18 +1,27 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 /**
- * Hidden easter egg — fires when player "Dhanush" (by name or specific avatar)
- * wins a match. Shows a custom image with shake + breathing animation.
+ * Victory easter egg for Dhanush win
  *
- * Plays for ~3 seconds then auto-dismisses.
+ * Team mode   -> Tom & Jerry GIF
+ * Solo mode   -> Cheems GIF
  *
  * Props:
- *   onDone: () => void
+ *   onDone?: () => void
+ *   mode?: 'team' | 'individual' | string
  */
-export default function VictoryEgg({ onDone }) {
+export default function VictoryEgg({ onDone, mode = 'individual' }) {
   const [phase, setPhase] = useState('appear'); // 'appear' | 'hold' | 'fadeOut' | 'done'
+
+  const isTeamMode = mode === 'team';
+
+  const gifSrc = useMemo(() => {
+    return isTeamMode
+      ? '/gifs/dhanush-team.gif'
+      : '/gifs/dhanush-solo.gif';
+  }, [isTeamMode]);
 
   useEffect(() => {
     const t1 = setTimeout(() => setPhase('hold'), 500);
@@ -43,7 +52,8 @@ export default function VictoryEgg({ onDone }) {
       <div
         className="absolute inset-0"
         style={{
-          background: 'radial-gradient(ellipse at center, rgba(245, 217, 137, 0.25) 0%, rgba(0,0,0,0.75) 70%)',
+          background:
+            'radial-gradient(ellipse at center, rgba(245, 217, 137, 0.25) 0%, rgba(0,0,0,0.75) 70%)',
           backdropFilter: 'blur(4px)',
         }}
       />
@@ -54,27 +64,30 @@ export default function VictoryEgg({ onDone }) {
         style={{
           width: '150vmax',
           height: '150vmax',
-          background: `repeating-conic-gradient(from 0deg at 50% 50%,
+          background: `repeating-conic-gradient(
+            from 0deg at 50% 50%,
             rgba(245, 217, 137, 0.15) 0deg,
             rgba(245, 217, 137, 0) 6deg,
             rgba(245, 217, 137, 0) 12deg,
-            rgba(245, 217, 137, 0.15) 18deg)`,
+            rgba(245, 217, 137, 0.15) 18deg
+          )`,
           animation: 'eggRayspin 6s linear infinite',
           opacity: phase === 'appear' ? 0 : 0.6,
           transition: 'opacity 0.6s ease-out',
         }}
       />
 
-      {/* Main image card */}
+      {/* Main GIF card */}
       <div
         className="relative"
         style={{
-          animation: phase === 'appear'
-            ? 'eggShakeIn 0.5s cubic-bezier(0.36, 0.07, 0.19, 0.97) both'
-            : phase === 'hold'
+          animation:
+            phase === 'appear'
+              ? 'eggShakeIn 0.5s cubic-bezier(0.36, 0.07, 0.19, 0.97) both'
+              : phase === 'hold'
               ? 'eggBreathing 2s ease-in-out infinite'
               : undefined,
-          maxWidth: 'min(90vw, 500px)',
+          width: 'min(92vw, 520px)',
         }}
       >
         <div
@@ -90,22 +103,96 @@ export default function VictoryEgg({ onDone }) {
           }}
         >
           <img
-            src="/avatars/friends/dhanush-victory.png"
+            src={gifSrc}
             alt="Victory!"
             style={{
               width: '100%',
               height: 'auto',
               display: 'block',
+              objectFit: 'contain',
+              background: '#000',
+              maxHeight: '70vh',
             }}
           />
 
-          {/* Sparkles around the image */}
-          <span style={{ position: 'absolute', top: '-15px', left: '8%', fontSize: '30px', animation: 'eggSparkle 1.5s ease-in-out infinite', textShadow: '0 0 20px gold' }}>✨</span>
-          <span style={{ position: 'absolute', top: '15%', right: '-15px', fontSize: '26px', animation: 'eggSparkle 1.5s ease-in-out infinite 0.3s', textShadow: '0 0 20px gold' }}>⭐</span>
-          <span style={{ position: 'absolute', bottom: '20%', left: '-15px', fontSize: '28px', animation: 'eggSparkle 1.5s ease-in-out infinite 0.6s', textShadow: '0 0 20px gold' }}>✨</span>
-          <span style={{ position: 'absolute', bottom: '-15px', right: '10%', fontSize: '30px', animation: 'eggSparkle 1.5s ease-in-out infinite 0.9s', textShadow: '0 0 20px gold' }}>⭐</span>
-          <span style={{ position: 'absolute', top: '40%', left: '-20px', fontSize: '22px', animation: 'eggSparkle 1.5s ease-in-out infinite 1.2s', textShadow: '0 0 20px gold' }}>💫</span>
-          <span style={{ position: 'absolute', top: '60%', right: '-18px', fontSize: '24px', animation: 'eggSparkle 1.5s ease-in-out infinite 1.5s', textShadow: '0 0 20px gold' }}>💫</span>
+          {/* Sparkles */}
+          <span
+            style={{
+              position: 'absolute',
+              top: '-15px',
+              left: '8%',
+              fontSize: '30px',
+              animation: 'eggSparkle 1.5s ease-in-out infinite',
+              textShadow: '0 0 20px gold',
+            }}
+          >
+            ✨
+          </span>
+
+          <span
+            style={{
+              position: 'absolute',
+              top: '15%',
+              right: '-15px',
+              fontSize: '26px',
+              animation: 'eggSparkle 1.5s ease-in-out infinite 0.3s',
+              textShadow: '0 0 20px gold',
+            }}
+          >
+            ⭐
+          </span>
+
+          <span
+            style={{
+              position: 'absolute',
+              bottom: '20%',
+              left: '-15px',
+              fontSize: '28px',
+              animation: 'eggSparkle 1.5s ease-in-out infinite 0.6s',
+              textShadow: '0 0 20px gold',
+            }}
+          >
+            ✨
+          </span>
+
+          <span
+            style={{
+              position: 'absolute',
+              bottom: '-15px',
+              right: '10%',
+              fontSize: '30px',
+              animation: 'eggSparkle 1.5s ease-in-out infinite 0.9s',
+              textShadow: '0 0 20px gold',
+            }}
+          >
+            ⭐
+          </span>
+
+          <span
+            style={{
+              position: 'absolute',
+              top: '40%',
+              left: '-20px',
+              fontSize: '22px',
+              animation: 'eggSparkle 1.5s ease-in-out infinite 1.2s',
+              textShadow: '0 0 20px gold',
+            }}
+          >
+            💫
+          </span>
+
+          <span
+            style={{
+              position: 'absolute',
+              top: '60%',
+              right: '-18px',
+              fontSize: '24px',
+              animation: 'eggSparkle 1.5s ease-in-out infinite 1.5s',
+              textShadow: '0 0 20px gold',
+            }}
+          >
+            💫
+          </span>
         </div>
       </div>
 
@@ -133,21 +220,36 @@ export default function VictoryEgg({ onDone }) {
             opacity: 1;
           }
         }
+
         @keyframes eggBreathing {
-          0%, 100% {
+          0%,
+          100% {
             transform: scale(1);
           }
           50% {
             transform: scale(1.025);
           }
         }
+
         @keyframes eggSparkle {
-          0%, 100% { opacity: 0.3; transform: scale(0.8) rotate(0); }
-          50%      { opacity: 1; transform: scale(1.3) rotate(180deg); }
+          0%,
+          100% {
+            opacity: 0.3;
+            transform: scale(0.8) rotate(0);
+          }
+          50% {
+            opacity: 1;
+            transform: scale(1.3) rotate(180deg);
+          }
         }
+
         @keyframes eggRayspin {
-          0%   { transform: rotate(0); }
-          100% { transform: rotate(360deg); }
+          0% {
+            transform: rotate(0);
+          }
+          100% {
+            transform: rotate(360deg);
+          }
         }
       `}</style>
     </div>

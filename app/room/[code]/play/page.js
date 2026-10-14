@@ -985,7 +985,7 @@ async function handleLockIndivBid() {
         dhanushWon = winningSeats.some((s) => isDhanushIdentifier(s.name, s.avatar_id));
       }
 
-      if (!isTeamMode && dhanushWon) {
+      if (dhanushWon) {
   setTimeout(() => setShowVictoryEgg(true), 3000);
 }
     }
@@ -1581,7 +1581,12 @@ function SpectatorLeaveButton() {
           roundNum={game?.current_round || 1}
         />
       )}
-       {showVictoryEgg && <VictoryEgg onDone={() => setShowVictoryEgg(false)} />}
+      {showVictoryEgg && (
+  <VictoryEgg
+    onDone={() => setShowVictoryEgg(false)}
+    mode={game?.mode}
+  />
+)}
 
       </>
     );
